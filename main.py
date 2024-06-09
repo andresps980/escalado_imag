@@ -80,7 +80,9 @@ if __name__ == '__main__':
     # global dynamodb
     # dynamodb = session_aws.client('dynamodb')
 
-    session_aws, s3, dynamodb, sqs, queue_url = create_session()
+    session_aws, s3, dynamodb, sqs, queue_url = create_session(logger)
+    if queue_url is None:
+        exit(-1)
 
     # Get a list of all messages from sqs queue from TVs
     # Este será nuestro Batch
@@ -88,14 +90,11 @@ if __name__ == '__main__':
     num_max_messages = 100
 
     # Origen de los ficheros de datos
-    file_list_json = get_messages_from_sqs_parallel(queue_url, num_max_messages)
+    file_list_json = get_messages_from_sqs_parallel(sqs, queue_url, num_max_messages, logger)
     # file_list_json  = mensajes[0:10]
     # file_list_json  = mensajes
 
-    print("Número de ficheros ", len(file_list_json))
-
-    # Print the list of files
-    print("Número de imágenes ", len(file_list_json))
+    logger.info(f"Número de ficheros e imagenes {len(file_list_json)}")
 
     # Get image paths
     # image_paths = ['imagen{}.jpeg'.format(i) for i in range(1000)]
@@ -106,7 +105,7 @@ if __name__ == '__main__':
     # Split json lists into batches
     batches = [file_list_json[i:i + batch_size] for i in range(0, len(file_list_json), batch_size)]
 
-    print("Número de batches ", len(batches))
+    logger.info(f"Número de batches {len(batches)}")
 
     #################
 
@@ -133,7 +132,7 @@ if __name__ == '__main__':
     # print(len(resized_images))
 
     # Print the total processing time
-    print("--- %s seconds ---" % (time.time() - start_time))
+    logger.info(f"{(time.time() - start_time)} seconds")
 
 '''
 with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -153,4 +152,4 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
 '''
 
 # Print the total processing time
-print("--- %s seconds ---" % (time.time() - start_time))
+logger.info(f"{(time.time() - start_time)} seconds")

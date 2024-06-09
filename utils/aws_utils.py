@@ -1,4 +1,6 @@
 import boto3
+from botocore.exceptions import ClientError
+# from botocore.exceptions import InvalidClientTokenId
 from utils.gestion_imagenes import load_image_from_url, \
     calcula_dimensiones_reescalado, \
     is_predominantly_white, \
@@ -15,6 +17,9 @@ from PIL import Image as Image_pil
 
 import cv2
 from cv2 import dnn_superres
+
+import concurrent.futures
+#from concurrent.futures import ThreadPoolExecutor
 
 # TODO Andres
 # https://pywombat.com/articles/ipython-comandos-magicos
@@ -36,7 +41,8 @@ BUCKET_QRS = 'bitv-qrs'
 BUCKET_ADS = 'bitv-ads'
 
 
-def create_session():
+def create_session(logger):
+
     session_aws = boto3.Session(
         aws_access_key_id=MYKEY,
         aws_secret_access_key=MYSECRET,
@@ -58,23 +64,30 @@ def create_session():
     # Initialize the SQS client using the existing session
     sqs = session_aws.client('sqs')
 
-    # Creamos una cola SQS por primera vez sobre AWS (es la cola de anuncios a las que las TVs envían en anuncio si es la primera
-    # vez que lo ven, para ser reescalados "off line" y en no tiempo real.
-    # Try to get the URL of the queue
+    # Creamos una cola SQS por primera vez sobre AWS (es la cola de anuncios a las que las TVs envían en anuncio si
+    # es la primera vez que lo ven, para ser reescalados "off line" y en no tiempo real. Try to get the URL of the
+    # queue
+    queue_url = None
     try:
         response = sqs.get_queue_url(QueueName=queue_name)
-        print(f"The queue '{queue_name}' exists and its URL is: {response['QueueUrl']}")
+        logger.info(f"The queue '{queue_name}' exists and its URL is: {response['QueueUrl']}")
         queue_url = response['QueueUrl']
 
     except sqs.exceptions.QueueDoesNotExist:
-        print(f"The queue '{queue_name}' does not exist.")
+        logger.info(f"The queue '{queue_name}' does not exist.")
 
         # Create an SQS queue using the existing session
         sqs = session_aws.resource('sqs')
         queue = sqs.create_queue(QueueName=queue_name)
         queue_url = queue.url
 
-        print(f"Created a new queue '{queue_name}' with URL: {queue_url}")
+        logger.info(f"Created a new queue '{queue_name}' with URL: {queue_url}")
+
+    except ClientError as e:
+        logger.error("Exception ClientError aws, creando acceso a colas", exc_info=True)
+
+    except Exception as e:
+        logger.error("Exception general, creando acceso a colas", exc_info=True)
 
     return session_aws, s3, dynamodb, sqs, queue_url
 
@@ -90,7 +103,7 @@ def get_message_body(message):
     return message_body
 
 
-def get_messages_from_sqs_parallel(queue_url, num_messages):
+def get_messages_from_sqs_parallel(sqs, queue_url, num_messages, logger):
     messages = []
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
@@ -107,7 +120,7 @@ def get_messages_from_sqs_parallel(queue_url, num_messages):
                     # sqs.delete_message(QueueUrl=QueueUrl , ReceiptHandle=message['ReceiptHandle'])
 
             except Exception as e:
-                print(e)
+                logger.error("Exception general, tratando mensajes en cola", exc_info=True)
     return messages
 
 
