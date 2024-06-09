@@ -1,10 +1,11 @@
 import boto3
-from gestion_imagenes import load_image_from_url, \
+from utils.gestion_imagenes import load_image_from_url, \
     calcula_dimensiones_reescalado, \
     is_predominantly_white, \
     identify_filetype, \
-    procedimiento_de_reescalado_imagen_por_ai
-from qr_utils import make_qr, \
+    procedimiento_de_reescalado_imagen_por_ai, \
+    make_gif
+from utils.qr_utils import make_qr, \
     adjust_qr_to_target_size
 
 import colorthief
@@ -14,6 +15,12 @@ from PIL import Image as Image_pil
 
 import cv2
 from cv2 import dnn_superres
+
+# TODO Andres
+# https://pywombat.com/articles/ipython-comandos-magicos
+# from IPython.display import Image as Image_Ipython
+# from IPython.display import Image, display
+# from IPython.display import Image as DisplayImage
 
 
 # Creamos una sesion de AWS accedemos API de AWS
@@ -51,7 +58,25 @@ def create_session():
     # Initialize the SQS client using the existing session
     sqs = session_aws.client('sqs')
 
-    return session_aws, s3, dynamodb, sqs
+    # Creamos una cola SQS por primera vez sobre AWS (es la cola de anuncios a las que las TVs envían en anuncio si es la primera
+    # vez que lo ven, para ser reescalados "off line" y en no tiempo real.
+    # Try to get the URL of the queue
+    try:
+        response = sqs.get_queue_url(QueueName=queue_name)
+        print(f"The queue '{queue_name}' exists and its URL is: {response['QueueUrl']}")
+        queue_url = response['QueueUrl']
+
+    except sqs.exceptions.QueueDoesNotExist:
+        print(f"The queue '{queue_name}' does not exist.")
+
+        # Create an SQS queue using the existing session
+        sqs = session_aws.resource('sqs')
+        queue = sqs.create_queue(QueueName=queue_name)
+        queue_url = queue.url
+
+        print(f"Created a new queue '{queue_name}' with URL: {queue_url}")
+
+    return session_aws, s3, dynamodb, sqs, queue_url
 
 
 def get_message_body(message):
@@ -323,6 +348,7 @@ def process_images(paths):
                 # Volver a montar el GIF animado con los PNGs reescalados
 
                 # TODO Andres: Elegir donde inicializar lo siguiente
+                # TODO Seguramente tengamos que hacer la selccion a CPU de test_cuda
                 sr = cv2.dnn_superres.DnnSuperResImpl_create()
 
                 if tipo_imagen == 'gif':
@@ -568,19 +594,97 @@ def process_images(paths):
 
 
 # TODO ANDRES, revisar las posibilidades de este codigo con cuenta Free...
-def obtiene_url_short (domain, originalURL):
-
+def obtiene_url_short(domain, originalURL):
     res = requests.post('https://api.short.io/links', json={
-          'domain': '9h5q.short.gy',
-          'originalURL': url_click,
-    }, headers = {
-          'authorization': api_key,
-          'content-type': 'application/json'
+        'domain': '9h5q.short.gy',
+        'originalURL': url_click,
+    }, headers={
+        'authorization': api_key,
+        'content-type': 'application/json'
     }, )
 
     res.raise_for_status()
     data = res.json()
 
-    #print (data['shortURL'])
+    # print (data['shortURL'])
 
     return data['shortURL']
+
+
+# Funcion de subida masiva de ficheros de anunciós captuardos a mano a Dynamo DB en parametros_del_modelo
+def bulk_load_items(items, table):
+    def process_item(item):
+        url_imagen_aux = item['url_ad']
+        url_click_aux = item['url_click']
+
+        nombre_imagen_aux = str(obtiene_nombre_fichero(url_imagen_aux))
+
+        url_imagen_aux = obtiene_nombre_fichero(item['url_click'])
+        timestamp_creacion_aux = item['SentTimestamp']
+
+        s3_url_imagen = 's3://bitv-ads/' + str(nombre_imagen_aux) + ".img"
+        s3_url_qr = 's3://bitv-qrs/' + str(nombre_imagen_aux) + ".qr"
+
+        # Calculamos el short de Click
+        domain = '9h5q.short.gy'
+        url_click_short = obtiene_url_short(domain, url_click_aux)
+
+        table.put_item(
+            Item={
+                'nombre_imagen': nombre_imagen_aux,
+                'SentTimestamp': timestamp_creacion_aux,
+                'url_ad': url_imagen_aux,
+                'url_click': url_click_aux,
+                's3_url_imagen': s3_url_imagen,
+                's3_url_qr': s3_url_qr,
+                'url_click_short': url_click_short,
+            },
+        )
+
+    # Set the maximum number of concurrent workers
+    max_workers = 10
+
+    # Create a thread pool executor
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Submit the bulk load tasks to the executor
+        futures = [executor.submit(process_item, item) for item in items]
+
+        # Wait for the tasks to complete
+        concurrent.futures.wait(futures)
+
+        # Retrieve the results (optional)
+        results = [future.result() for future in futures]
+
+    return results
+
+
+# Se adopta el criterio que el nombre del fichero a guardar en nuestro repositorio es el nombre del fichoro que sale
+# en la URL quitando el el sufijo final. Este será el indice de la base de datos para luego buscar si de ese anuncio
+# ya tenemos escalado en tamaño ese anuncio o no y también sera el nombre de la imagen (***.qr) del QR generado.
+def obtiene_nombre_fichero(url_anuncio):
+    # Quitamos todos los campos de la URL salvo el ultimo después de la última "/"
+    try:
+        nombre_fichero_partido = url_anuncio.split('/')
+        nombre_fichero = nombre_fichero_partido[-1]
+
+        # Del campo resultante separamos si hay un punto (***.jpeg o ****.gif y nos quedemos con la primera parte)
+        nombre_fichero = nombre_fichero.split('.')
+        nombre_fichero = nombre_fichero[0]
+
+    except:
+        nombre_fichero = ""
+
+    return nombre_fichero
+
+
+# Elimina ficheros en paralelo
+def remove_files_with_string(directory, string):
+    def remove_file(file_to_remove):
+        file_path = os.path.join(directory, file_to_remove)
+        os.remove(file_path)
+
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        filenames = os.listdir(directory)
+        for filename in filenames:
+            if string in filename:
+                executor.submit(remove_file, filename)

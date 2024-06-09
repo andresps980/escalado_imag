@@ -1,6 +1,7 @@
 import logging
 import argparse
 import os.path
+import time
 
 from utils.aws_utils import create_session, get_messages_from_sqs_parallel, process_images
 
@@ -79,7 +80,7 @@ if __name__ == '__main__':
     # global dynamodb
     # dynamodb = session_aws.client('dynamodb')
 
-    session_aws, s3, dynamodb, sqs = create_session()
+    session_aws, s3, dynamodb, sqs, queue_url = create_session()
 
     # Get a list of all messages from sqs queue from TVs
     # Este será nuestro Batch

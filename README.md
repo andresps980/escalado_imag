@@ -27,3 +27,6 @@
 
 * Instalar Pure Python QR Code generator with no dependencies.
   * pip install segno
+
+* Instalar Imageio: la biblioteca Python dedicada a los datos de imágenes
+  * pip install imageio

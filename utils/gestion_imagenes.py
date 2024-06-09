@@ -5,6 +5,8 @@ from PIL import ImageSequence
 from PIL import Image as Image_pil
 from PIL import ImageFile
 
+import imageio
+
 
 def save_gif_frames(image):
     # Open the animated gif with PIL
@@ -175,8 +177,8 @@ def async_inference(images):
     return predictions
 '''
 
-
-@tf.function
+# TODO Andres no encuentra esta funcion, quiza en la compilacion con GPU habilitada?????
+# @tf.function
 def procedimiento_de_reescalado_imagen_por_ai(modelo_, imagen_, sr):
     with tf.device(device):
         # Obtenemos los parámetros que aplicar al modelo de reescalado
@@ -248,3 +250,22 @@ def calcula_modelo_reescaldo(modelo):
 
     elif modelo == 10:
         return "LapSRN_x8.pb", "LapSRN", 8
+
+
+def make_gif(filenames_, durations_, gif_path_, loop_):
+    # Load the images using imageio
+    images = [imageio.v2.imread(filename) for filename in filenames_]
+
+
+    # Set the durations for each frame
+    #durations = durations_
+
+    # Convert durations from milliseconds to seconds
+    durations = [duration / 1000 for duration in durations_]
+
+
+    # Save the animated GIF
+    imageio.mimsave(gif_path_, images, duration=durations, loop=loop_)
+
+    # Clean up memory by deleting image objects
+    del images
