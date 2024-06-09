@@ -19,7 +19,6 @@ import cv2
 from cv2 import dnn_superres
 
 import concurrent.futures
-#from concurrent.futures import ThreadPoolExecutor
 
 # TODO Andres
 # https://pywombat.com/articles/ipython-comandos-magicos

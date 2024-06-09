@@ -2,6 +2,7 @@ import logging
 import argparse
 import os.path
 import time
+import concurrent.futures
 
 from utils.aws_utils import create_session, get_messages_from_sqs_parallel, process_images
 
@@ -150,6 +151,3 @@ with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         # Release memory of resized_images
         del resized_images
 '''
-
-# Print the total processing time
-logger.info(f"{(time.time() - start_time)} seconds")
