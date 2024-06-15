@@ -1,11 +1,14 @@
 import cv2
+import urllib.request
 import numpy as np
+import imageio
+import string
+import random
 
+from io import BytesIO
 from PIL import ImageSequence
 from PIL import Image as Image_pil
 from PIL import ImageFile
-
-import imageio
 
 
 def save_gif_frames(image):
@@ -86,8 +89,8 @@ def load_image_from_url(url):
             # Save the current frame as a png file
             imagen.save(filename, format='JPEG')
 
-    except:
-
+    except Exception as e:
+        logger.error("Exception in load_image_from_url, message: ", exc_info=True)
         imagen = None
         filenames_list = []
         durations_list = []
@@ -177,35 +180,36 @@ def async_inference(images):
     return predictions
 '''
 
-# TODO Andres no encuentra esta funcion, quiza en la compilacion con GPU habilitada?????
+
+# TODO Andres Anotacion solo para notebooks
+#  https://www.tensorflow.org/api_docs/python/tf/function#used-in-the-notebooks
 # @tf.function
 def procedimiento_de_reescalado_imagen_por_ai(modelo_, imagen_, sr):
-    with tf.device(device):
-        # Obtenemos los parámetros que aplicar al modelo de reescalado
-        parametros = calcula_modelo_reescaldo(modelo_)
-        sr.readModel(parametros[0])
-        sr.setModel(parametros[1], parametros[2])
+    # with tf.device(device):
+    # Obtenemos los parámetros que aplicar al modelo de reescalado
+    parametros = calcula_modelo_reescaldo(modelo_)
+    sr.readModel(f".\\models\\{parametros[0]}")
+    sr.setModel(parametros[1], parametros[2])
 
-        # Cambiamos la imagen tipo PIL a un numpy array
-        numpy_image = cv2.cvtColor(np.array(imagen_), cv2.COLOR_RGB2BGR)
+    # Cambiamos la imagen tipo PIL a un numpy array
+    numpy_image = cv2.cvtColor(np.array(imagen_), cv2.COLOR_RGB2BGR)
 
-        # procesamos la imagen y la reescalamos
-        result = sr.upsample(numpy_image)
+    # procesamos la imagen y la reescalamos
+    result = sr.upsample(numpy_image)
 
-        # Calculamos las dimensiones de reescalado
-        dim_ = calcula_dimensiones_reescalado(imagen_)
+    # Calculamos las dimensiones de reescalado
+    dim_ = calcula_dimensiones_reescalado(imagen_)
 
-        # Reescalamos con CV2 el ultimo tramo hacia abajo de la imagen
-        frame_image_resized = cv2.resize(result, dim_, interpolation=cv2.INTER_AREA)
+    # Reescalamos con CV2 el ultimo tramo hacia abajo de la imagen
+    frame_image_resized = cv2.resize(result, dim_, interpolation=cv2.INTER_AREA)
 
-        # Añadimos la imagen a conjunto de imagenes que contiene un gif animado
-        # si la imagen no es un gif animado, la imagen es de un únic frame
+    # Añadimos la imagen a conjunto de imagenes que contiene un gif animado
+    # si la imagen no es un gif animado, la imagen es de un únic frame
 
-        # Convert the resized image back to PIL image PNG
-        pil_image = Image_pil.fromarray(cv2.cvtColor(frame_image_resized, cv2.COLOR_BGR2RGB))
+    # Convert the resized image back to PIL image PNG
+    pil_image = Image_pil.fromarray(cv2.cvtColor(frame_image_resized, cv2.COLOR_BGR2RGB))
 
-        # Devolvemos una image PNG PIL
-
+    # Devolvemos una image PNG PIL
     return pil_image
 
 
@@ -256,16 +260,23 @@ def make_gif(filenames_, durations_, gif_path_, loop_):
     # Load the images using imageio
     images = [imageio.v2.imread(filename) for filename in filenames_]
 
-
     # Set the durations for each frame
-    #durations = durations_
+    # durations = durations_
 
     # Convert durations from milliseconds to seconds
     durations = [duration / 1000 for duration in durations_]
-
 
     # Save the animated GIF
     imageio.mimsave(gif_path_, images, duration=durations, loop=loop_)
 
     # Clean up memory by deleting image objects
     del images
+
+
+def get_total_frames(gif_path):
+    # Open the GIF image
+    with Image_pil.open(gif_path) as im:
+        # Get the total number of frames
+        total_frames = im.n_frames
+
+    return total_frames

@@ -1,4 +1,7 @@
 import segno
+import string
+import random
+
 from PIL import Image as Image_pil
 
 

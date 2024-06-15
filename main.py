@@ -1,64 +1,15 @@
-import logging
-import argparse
-import os.path
 import time
 import concurrent.futures
 
 from utils.aws_utils import create_session, get_messages_from_sqs_parallel, process_images
-
-
-def argumentos_validos():
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument("-ll", "--LogLevel", help="Nivel de log", default="INFO")
-    parser.add_argument("-dl", "--DirLogs", help="Directorio donde se ubicaran los archivos a tratar, deberan ser "
-                                                 "archivos con extension .log", default="./logs/")
-    parser.add_argument("-od", "--OutputDir", help="Directorio donde se ubicaran los resultados y el archivo de trazas",
-                        default="./")
-
-    return parser
-
-
-def dame_nivel_log(level):
-    niveles = {'DEBUG': logging.DEBUG,
-               'INFO': logging.INFO,
-               'WARNING': logging.WARNING,
-               'ERROR': logging.ERROR,
-               'CRITICAL': logging.CRITICAL}
-    return niveles[level]
-
-
-def configura_logs(args):
-    if not os.path.exists(args.OutputDir):
-        os.mkdir(args.OutputDir)
-
-    logger_repos = logging.getLogger(__name__)
-
-    # Create handlers
-    c_handler = logging.StreamHandler()
-    f_handler = logging.FileHandler(args.OutputDir + 'file.log', 'a')
-    c_handler.setLevel(dame_nivel_log(args.LogLevel))
-    f_handler.setLevel(dame_nivel_log(args.LogLevel))
-
-    # Create formatters and add it to handlers
-    c_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    f_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    c_handler.setFormatter(c_format)
-    f_handler.setFormatter(f_format)
-
-    # Add handlers to the logger
-    logger_repos.addHandler(c_handler)
-    logger_repos.addHandler(f_handler)
-    logger_repos.setLevel(dame_nivel_log(args.LogLevel))
-
-    return logger_repos
+from utils.trazas import configura_logs, argumentos_validos
 
 
 def print_cabecera():
     logger.info('')
     logger.info('')
     logger.info('----------------------------------------------------------')
-    logger.info(' \t Comienza procesamiento de logs escalado de imagenes')
+    logger.info(' \t Comienza proceso escalado de imagenes')
     logger.info('----------------------------------------------------------')
 
 
@@ -122,7 +73,7 @@ if __name__ == '__main__':
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
         # with concurrent.futures.ProcessPoolExecutor() as executor:
         # Apply process_images function to each batch of image paths asynchronously
-        results = [executor.submit(process_images, batch) for batch in batches]
+        results = [executor.submit(process_images, batch, logger) for batch in batches]
 
         # Get the results
         # resized_images = [result.result() for result in concurrent.futures.as_completed(results)]
@@ -133,7 +84,7 @@ if __name__ == '__main__':
     # print(len(resized_images))
 
     # Print the total processing time
-    logger.info(f"{(time.time() - start_time)} seconds")
+    logger.info(f"Tiempo de procesamiento: {(time.time() - start_time)} seconds")
 
 '''
 with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:

@@ -1,5 +1,8 @@
 "# escalado_imag" 
 
+
+git clone https://github.com/andresps980/escalado_imag.git
+
 * Instalacion python 3.10
 
 * Instalacion de pip

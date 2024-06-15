@@ -1,24 +1,30 @@
 import boto3
+import concurrent.futures
+import json
+import datetime
+import requests
+import io
+import os
+import colorthief
+from colorthief import ColorThief
+
+import cv2
+from cv2 import dnn_superres
+
 from botocore.exceptions import ClientError
-# from botocore.exceptions import InvalidClientTokenId
+
 from utils.gestion_imagenes import load_image_from_url, \
     calcula_dimensiones_reescalado, \
     is_predominantly_white, \
     identify_filetype, \
     procedimiento_de_reescalado_imagen_por_ai, \
-    make_gif
+    make_gif, \
+    get_total_frames
+
 from utils.qr_utils import make_qr, \
     adjust_qr_to_target_size
 
-import colorthief
-from colorthief import ColorThief
-
 from PIL import Image as Image_pil
-
-import cv2
-from cv2 import dnn_superres
-
-import concurrent.futures
 
 # TODO Andres
 # https://pywombat.com/articles/ipython-comandos-magicos
@@ -41,7 +47,6 @@ BUCKET_ADS = 'bitv-ads'
 
 
 def create_session(logger):
-
     session_aws = boto3.Session(
         aws_access_key_id=MYKEY,
         aws_secret_access_key=MYSECRET,
@@ -102,6 +107,21 @@ def get_message_body(message):
     return message_body
 
 
+def send_message_sqs(sqs_, url_ad_, url_click_, queue_url_):
+    message = {
+        'url_ad': url_ad_,
+        'url_click': url_click_,
+    }
+
+    # Enviamos mensaje a la cola
+    response = sqs_.send_message(
+        QueueUrl=queue_url_,
+        MessageBody=json.dumps(message)
+    )
+
+    return response
+
+
 def get_messages_from_sqs_parallel(sqs, queue_url, num_messages, logger):
     messages = []
 
@@ -116,14 +136,14 @@ def get_messages_from_sqs_parallel(sqs, queue_url, num_messages, logger):
                     messages.append(get_message_body(message))
 
                     # Opción de borrar los mensajes de la cola una vez recogidos
-                    # sqs.delete_message(QueueUrl=QueueUrl , ReceiptHandle=message['ReceiptHandle'])
+                    sqs.delete_message(QueueUrl=queue_url, ReceiptHandle=message['ReceiptHandle'])
 
             except Exception as e:
                 logger.error("Exception general, tratando mensajes en cola", exc_info=True)
     return messages
 
 
-def process_images(paths):
+def process_images(paths, logger):
     bucket_name_imagenes = BUCKET_ADS
     bucket_name_qrs = BUCKET_QRS
 
@@ -150,28 +170,22 @@ def process_images(paths):
 
         # Descargamos la imagen desde el CDN del anunciante y calculamos algunos datos de ella
 
-        try:  # Intentamos leer la imagen desde la URL recibida
-
+        try:
+            # Intentamos leer la imagen desde la URL recibida
             tipo_imagen, imagen, filenames_list, durations_list = load_image_from_url(url_imagen)
             # tipo_imagen , imagen , filenames_list, durations_list = load_image_from_url_memory(url_imagen)
 
             # print ("\nmuestra de imagen cargada : ")
             # imagen.show()
 
-
-        except:  # Intentamos leer la imagen desde la URL recibida
-
+        except Exception as e:
+            logger.error("Exception calling load_image_from_url, message: ", exc_info=True)
             imagen = None
-            print("************* eeeeerrrrrroooooorrrrrr  ***************+")
-            print("Para path = ", path, "Error en la recupercion de la imagen")
 
-        # Si la imagen no es vacia
-        if imagen != None:
-
-            try:  # Proceso general de UNA imagen del BATCH
-
+        if imagen is not None:
+            try:
+                # Proceso general de UNA imagen del BATCH
                 # Preparamos ficheros generales y nombres.
-
                 bucket_s3_imagenes = "s3://" + bucket_name_imagenes
                 bucket_s3_qrs = "s3://" + bucket_name_qrs
 
@@ -227,8 +241,8 @@ def process_images(paths):
                             dominant_color = color_thief.get_color(quality=1)
                             # print ('dominant_color png ',dominant_color)
 
-                    except:
-
+                    except Exception as e:
+                        logger.error("Exception calculando color predominante PNG, mensaje: ", exc_info=True)
                         dominant_color = (0, 0, 0)
                         # print ('dominant_color png except',dominant_color)
 
@@ -262,9 +276,8 @@ def process_images(paths):
                             dominant_color = color_thief.get_color(quality=1)
                             # print ('dominant_color gif ',dominant_color)
 
-
-                    except:
-
+                    except Exception as e:
+                        logger.error("Exception calculando color predominante GIF, mensaje: ", exc_info=True)
                         dominant_color = (0, 0, 0)
                         # print ('gif dominant_color gif except ',dominant_color)
 
@@ -295,9 +308,8 @@ def process_images(paths):
                             # Get the dominant color
                             dominant_color = color_thief.get_color(quality=1)
                             # print ('dominant_color jpeg  ',dominant_color)
-
-                    except:
-
+                    except Exception as e:
+                        logger.error("Exception calculando color predominante JPEG, mensaje: ", exc_info=True)
                         dominant_color = (0, 0, 0)
                         # print ('dominant_color jpeg except ',dominant_color)
 
@@ -317,8 +329,7 @@ def process_images(paths):
 
                 # Calculamos y guardamos el valor de la url_corta con la api de nuestro proveedor externo
                 domain = '9h5q.short.gy'
-                originalURL = url_click
-                url_click_short = obtiene_url_short(domain, originalURL)
+                url_click_short = obtiene_url_short(domain, url_click)
 
                 ###### Creamos el código QR
 
@@ -375,19 +386,18 @@ def process_images(paths):
                         resized_image_file.seek(0)
                         resized_gif_frames_files.append(resized_image_file)
 
-                    print("total de resized_gif_frames_files:", len(resized_gif_frames_files))
+                    logger.info(f'Total de resized_gif_frames_files: {len(resized_gif_frames_files)}')
 
                     nombre_fichero_a_guardar = "TONTO_" + nombre_fichero_imagen + '.gif'
-
-                    print(nombre_fichero_a_guardar)
+                    logger.info(f'Nombre fichero a guardar: {nombre_fichero_a_guardar}')
 
                     make_gif(resized_gif_frames_files, durations_list, nombre_fichero_a_guardar, 1)
+                    logger.info(f'Numero frames imagen final gif: {get_total_frames(nombre_fichero_a_guardar)}')
 
-                    print("Numero frames imagen final gif:", get_total_frames(nombre_fichero_a_guardar))
-
+                    # TODO Andres saltamos esta comprobacion...
                     # Presentamos el gif animado en pantalla
-                    print("Muestra del GIF animado reescalado : ")
-                    display(DisplayImage(filename=nombre_fichero_a_guardar))
+                    # print("Muestra del GIF animado reescalado : ")
+                    # display(DisplayImage(filename=nombre_fichero_a_guardar))
 
                 '''
                   if tipo_imagen == 'gif' :
@@ -524,7 +534,8 @@ def process_images(paths):
                     'url_click_short': url_click_short,
                 },
 
-                bulk_load_items(Item, table)
+                # TODO Andres: De momento no subimos las imagenes hasta controlar la prueba...
+                # bulk_load_items(Item, table)
 
                 ########
 
@@ -574,7 +585,7 @@ def process_images(paths):
                 # Quitamos los fichero empleados.
 
                 # Specify the directory path where the files are located
-                directory_path = ''
+                directory_path = '.\\'
 
                 # Specify the string to search for in filenames
                 search_strings = ['qr_temp', 'png', 'gif_frame', 'imgen_temp']
@@ -584,21 +595,18 @@ def process_images(paths):
                 for string_aux in search_strings:
                     remove_files_with_string(directory_path, string_aux)
 
-                # os.remove(nombre_fichero_a_guardar)
-                # os.remove(nombre_fichero_qr_a_guardar)
+                os.remove(nombre_fichero_a_guardar)
+                os.remove(nombre_fichero_qr_a_guardar)
                 # os.remove(filenames_list)
                 # os.remove(nombre_fichero_qr_temp)
-                os.remove(nombre_fichero_qr_temp_reescalado)
-                os.remove('temp_resized_gif.gif')
+                # os.remove(nombre_fichero_qr_temp_reescalado)
+                # os.remove('temp_resized_gif.gif')
 
-
-
-            except:  # si ha fallado algo del proceso general de una imagen.
-                pass
-
+            except Exception as e:
+                logger.error("Exception scaling image, message: ", exc_info=True)
 
         else:  # si la imagen que se ha subido desde la URL resulta vacía.
-            pass
+            logger.info("WARNING Empty image returned from load_image_from_url: ")
 
         # Fin de análisi de todas las imágenes de un BATCH
 
@@ -606,9 +614,11 @@ def process_images(paths):
 
 
 # TODO ANDRES, revisar las posibilidades de este codigo con cuenta Free...
-def obtiene_url_short(domain, originalURL):
+def obtiene_url_short(domain, url_click):
+    # TODO Andres: gestion de keys
+    api_key = 'sk_NXkXYJDAKqE5eP88'
     res = requests.post('https://api.short.io/links', json={
-        'domain': '9h5q.short.gy',
+        'domain': domain,
         'originalURL': url_click,
     }, headers={
         'authorization': api_key,
