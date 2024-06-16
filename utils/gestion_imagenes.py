@@ -4,6 +4,7 @@ import numpy as np
 import imageio
 import string
 import random
+import os
 
 from io import BytesIO
 from PIL import ImageSequence
@@ -11,7 +12,7 @@ from PIL import Image as Image_pil
 from PIL import ImageFile
 
 
-def save_gif_frames(image):
+def save_gif_frames(image, temp_folder):
     # Open the animated gif with PIL
     with image as im:
         filenames = []
@@ -34,7 +35,7 @@ def save_gif_frames(image):
             duration = im.info['duration']
             # Generate a unique filename for the current frame
             # filename = f"{os.path.splitext(image)[0]}_{i}.png"
-            filename = f"gif_frame_{i}" + random_string + ".png"
+            filename = os.path.join(temp_folder, f"gif_frame_{i}" + random_string + ".png")
             # current_dir = os.path.abspath('.')
             # filename = current_dir+'/'+filename
 
@@ -44,6 +45,7 @@ def save_gif_frames(image):
             filenames.append(filename)
             durations.append(duration)
 
+            # TODO Andres se generan gifs de hasta 200 PNGs ?????
             # limitamos las rotaciones del Gif animado a 50
             if len(filenames) > 20:
                 # filenames = filenames[0:50]
@@ -55,7 +57,7 @@ def save_gif_frames(image):
     return filenames, durations
 
 
-def load_image_from_url(url):
+def load_image_from_url(url, temp_folder, logger):
     filenames_list = []
     durations_list = []
 
@@ -71,7 +73,7 @@ def load_image_from_url(url):
 
         # Si la imagen en GIF , la desconompemos en lista de PNGs y tiempos de transición
         if 'gif' in imagen.format.lower():
-            filenames_list, durations_list = save_gif_frames(imagen)
+            filenames_list, durations_list = save_gif_frames(imagen, temp_folder)
 
         else:  # para el resto del tipo de imágenes
 
@@ -81,7 +83,7 @@ def load_image_from_url(url):
             random_string = ''.join(random.choice(characters) for _ in range(2))
 
             # generamos un nombre de fichero aleatorio
-            filename = "imagen_temp_ " + random_string + ".jpeg"
+            filename = os.path.join(temp_folder, "imagen_temp_ " + random_string + ".jpeg")
 
             # Añadimos el nombre a
             filenames_list = [filename]
@@ -90,7 +92,7 @@ def load_image_from_url(url):
             imagen.save(filename, format='JPEG')
 
     except Exception as e:
-        logger.error("Exception in load_image_from_url, message: ", exc_info=True)
+        logger.error(f"Exception cargando imagen desde URL: {url}, message: ", exc_info=True)
         imagen = None
         filenames_list = []
         durations_list = []
@@ -137,7 +139,8 @@ def is_predominantly_white(imagen_, threshold=200):
 
     if tipo_imagen == "jpeg":
         # Convert the image to HSV color space
-        hsv_image = cv2.cvtColor(imagen_, cv2.COLOR_BGR2HSV)
+        numpy_image = cv2.cvtColor(np.array(imagen_), cv2.COLOR_RGB2BGR)
+        hsv_image = cv2.cvtColor(numpy_image, cv2.COLOR_BGR2HSV)
 
     if tipo_imagen == "gif":
         # Cambiamos la imagen tipo PIL a un numpy array

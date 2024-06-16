@@ -1,12 +1,13 @@
 import segno
 import string
 import random
+import os
 
 from PIL import Image as Image_pil
 
 
 # GENERACION DE CODIGOS QR de interactividad equivalentes a hacer click en pantalla.
-def make_qr(text_, coordenadas_color_, light_='white'):
+def make_qr(temp_folder, text_, coordenadas_color_, light_='white'):
     qrcode = segno.make(text_)
 
     # Save the QR code as a PNG file
@@ -15,7 +16,7 @@ def make_qr(text_, coordenadas_color_, light_='white'):
     characters = string.ascii_letters
     random_string = ''.join(random.choice(characters) for _ in range(2))
 
-    nombre_fichero_qr_temp = 'qr_temp' + random_string + '.png'
+    nombre_fichero_qr_temp = os.path.join(temp_folder, 'qr_temp' + random_string + '.png')
 
     # qrcode.save('qr_temp.png', scale=10, dark=coordenadas_color_, light = light_ )
     qrcode.save(nombre_fichero_qr_temp, scale=10, dark=coordenadas_color_, light=light_)
@@ -25,7 +26,7 @@ def make_qr(text_, coordenadas_color_, light_='white'):
     return nombre_fichero_qr_temp
 
 
-def adjust_qr_to_target_size(qr_file, target_size):
+def adjust_qr_to_target_size(qr_file, target_size, temp_folder):
     # Open the PNG file using Pillow
 
     try:
@@ -48,7 +49,7 @@ def adjust_qr_to_target_size(qr_file, target_size):
     new_width = round(target_size * qr_aspect_ratio)
     new_height = round(target_size / qr_aspect_ratio)
 
-    nombre_fichero_qr_temp = 'qr_temp' + random_string + '.png'
+    nombre_fichero_qr_temp = os.path.join(temp_folder, 'qr_temp' + random_string + '.png')
 
     # Resize the QR code to the new dimensions
     resized_qr_image = qr.resize((new_width, new_height), resample=Image_pil.LANCZOS)

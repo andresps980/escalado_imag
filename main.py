@@ -36,55 +36,61 @@ if __name__ == '__main__':
     if queue_url is None:
         exit(-1)
 
-    # Get a list of all messages from sqs queue from TVs
-    # Este será nuestro Batch
-    # num_max_messages = len(mensajes)
-    num_max_messages = 100
+    while True:
+        # Get a list of all messages from sqs queue from TVs
+        # Este será nuestro Batch
+        # num_max_messages = len(mensajes)
+        num_max_messages = 100
 
-    # Origen de los ficheros de datos
-    file_list_json = get_messages_from_sqs_parallel(sqs, queue_url, num_max_messages, logger)
-    # file_list_json  = mensajes[0:10]
-    # file_list_json  = mensajes
+        # Origen de los ficheros de datos
+        file_list_json = get_messages_from_sqs_parallel(sqs, queue_url, num_max_messages, logger)
+        # file_list_json  = mensajes[0:10]
+        # file_list_json  = mensajes
 
-    logger.info(f"Número de ficheros e imagenes {len(file_list_json)}")
+        logger.info(f"Número de ficheros e imagenes {len(file_list_json)}")
 
-    # Get image paths
-    # image_paths = ['imagen{}.jpeg'.format(i) for i in range(1000)]
-    # image_paths = file_list
+        if len(file_list_json) == 0:
+            logger.info(f'No hay mensajes en cola, 5 segundos de espera...')
+            time.sleep(5)
+            continue
 
-    batch_size = 40
+        # Get image paths
+        # image_paths = ['imagen{}.jpeg'.format(i) for i in range(1000)]
+        # image_paths = file_list
 
-    # Split json lists into batches
-    batches = [file_list_json[i:i + batch_size] for i in range(0, len(file_list_json), batch_size)]
+        batch_size = 40
 
-    logger.info(f"Número de batches {len(batches)}")
+        # Split json lists into batches
+        batches = [file_list_json[i:i + batch_size] for i in range(0, len(file_list_json), batch_size)]
 
-    #################
+        logger.info(f"Número de batches {len(batches)}")
 
-    # Create a process pool with one process per CPU core
-    max_workers = 20
-    # max_workers = 1
+        #################
 
-    global contador
-    contador = 1
+        # Create a process pool with one process per CPU core
+        max_workers = 20
+        # max_workers = 1
 
-    # Create a thread pool executor
+        global contador
+        contador = 1
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # with concurrent.futures.ProcessPoolExecutor() as executor:
-        # Apply process_images function to each batch of image paths asynchronously
-        results = [executor.submit(process_images, batch, logger) for batch in batches]
+        # Create a thread pool executor
 
-        # Get the results
-        # resized_images = [result.result() for result in concurrent.futures.as_completed(results)]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # with concurrent.futures.ProcessPoolExecutor() as executor:
+            # Apply process_images function to each batch of image paths asynchronously
+            results = [executor.submit(process_images, batch, logger) for batch in batches]
 
-    # Flatten the resized images list
-    # resized_images = [image for batch in resized_images for image in batch]
+            # Get the results
+            # resized_images = [result.result() for result in concurrent.futures.as_completed(results)]
 
-    # print(len(resized_images))
+        # Flatten the resized images list
+        # resized_images = [image for batch in resized_images for image in batch]
 
-    # Print the total processing time
-    logger.info(f"Tiempo de procesamiento: {(time.time() - start_time)} seconds")
+        # print(len(resized_images))
+
+        # Print the total processing time
+        logger.info(f"Tiempo de procesamiento: {(time.time() - start_time)} seconds")
 
 '''
 with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:

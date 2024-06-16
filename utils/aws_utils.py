@@ -5,6 +5,8 @@ import datetime
 import requests
 import io
 import os
+import string
+import random
 import colorthief
 from colorthief import ColorThief
 
@@ -160,6 +162,13 @@ def process_images(paths, logger):
 
     for path in paths:  # Recorremos todas las imagenes del Bath
 
+        # TODO Andres: Para pruebas de imagen voy a guardar de momento en un dir por escalado
+        characters = string.ascii_letters
+        result_str = ''.join(random.choice(characters) for _ in range(5))
+        path_base = '.'
+        temp_folder = os.path.join(path_base, "img", 'imagenes_temp_' + result_str)
+        os.mkdir(temp_folder)
+
         # Tenemos una entrada de un json con la URL de la imagen y la url de click.
         # Tenemos que obtener URL de ambas.
         # path es un DICT
@@ -172,7 +181,7 @@ def process_images(paths, logger):
 
         try:
             # Intentamos leer la imagen desde la URL recibida
-            tipo_imagen, imagen, filenames_list, durations_list = load_image_from_url(url_imagen)
+            tipo_imagen, imagen, filenames_list, durations_list = load_image_from_url(url_imagen, temp_folder, logger)
             # tipo_imagen , imagen , filenames_list, durations_list = load_image_from_url_memory(url_imagen)
 
             # print ("\nmuestra de imagen cargada : ")
@@ -293,7 +302,7 @@ def process_images(paths, logger):
                     try:
 
                         # Comprobamos si la imagen es predominantemente clara
-                        is_white = is_predominantly_white(image)
+                        is_white = is_predominantly_white(imagen)
 
                         if is_white:
                             # print("The image is predominantly white.")
@@ -336,7 +345,7 @@ def process_images(paths, logger):
                 # qr_image = make_qr ( url_click_short )
 
                 # Creamos un qr y obtenemos el nombre del fichero donde se ha creado
-                nombre_fichero_qr_temp = make_qr(url_click_short, dominant_color, light_='white')
+                nombre_fichero_qr_temp = make_qr(temp_folder, url_click_short, dominant_color, light_='white')
 
                 qr_image = Image_pil.open(nombre_fichero_qr_temp)
 
@@ -346,12 +355,15 @@ def process_images(paths, logger):
                     target_size = 300
 
                 # Generamos un QR reescalado y obtnemos el valor del fichero donde se ha depositado
-                nombre_fichero_qr_temp_reescalado = adjust_qr_to_target_size(nombre_fichero_qr_temp, target_size)
+                nombre_fichero_qr_temp_reescalado = adjust_qr_to_target_size(nombre_fichero_qr_temp,
+                                                                             target_size,
+                                                                             temp_folder)
 
                 # Abrimos la imagen del QR reescalado desde disco
                 qr_image_reescalado = Image_pil.open(nombre_fichero_qr_temp_reescalado)
 
                 # Guardamos el QR final con color y reescalado
+                nombre_fichero_qr_a_guardar = os.path.join(temp_folder, nombre_fichero_qr_a_guardar)
                 qr_image_reescalado.save(nombre_fichero_qr_a_guardar, format='PNG')
 
                 # Mostramos en modo prueba el gif generado con color y tamaño definitivo
@@ -388,7 +400,7 @@ def process_images(paths, logger):
 
                     logger.info(f'Total de resized_gif_frames_files: {len(resized_gif_frames_files)}')
 
-                    nombre_fichero_a_guardar = "TONTO_" + nombre_fichero_imagen + '.gif'
+                    nombre_fichero_a_guardar = os.path.join(temp_folder, "TONTO_" + nombre_fichero_imagen + '.gif')
                     logger.info(f'Nombre fichero a guardar: {nombre_fichero_a_guardar}')
 
                     make_gif(resized_gif_frames_files, durations_list, nombre_fichero_a_guardar, 1)
@@ -582,31 +594,30 @@ def process_images(paths, logger):
                   upload_file( nombre_fichero_a_subir , BUCKET_qr , object_name = nombre_fichero_salida )
                   '''
 
-                # Quitamos los fichero empleados.
-
-                # Specify the directory path where the files are located
-                directory_path = '.\\'
-
-                # Specify the string to search for in filenames
-                search_strings = ['qr_temp', 'png', 'gif_frame', 'imgen_temp']
-
-                # Call the function to remove files containing the specified string in the directory
-
-                for string_aux in search_strings:
-                    remove_files_with_string(directory_path, string_aux)
-
-                os.remove(nombre_fichero_a_guardar)
-                os.remove(nombre_fichero_qr_a_guardar)
-                # os.remove(filenames_list)
-                # os.remove(nombre_fichero_qr_temp)
-                # os.remove(nombre_fichero_qr_temp_reescalado)
-                # os.remove('temp_resized_gif.gif')
+                # TODO Andres de momento no borramos para ver resultados
+                # # Quitamos los fichero empleados.
+                # # Specify the directory path where the files are located
+                # directory_path = '.\\'
+                #
+                # # Specify the string to search for in filenames
+                # search_strings = ['qr_temp', 'png', 'gif_frame', 'imgen_temp']
+                #
+                # # Call the function to remove files containing the specified string in the directory
+                # for string_aux in search_strings:
+                #     remove_files_with_string(directory_path, string_aux)
+                #
+                # os.remove(nombre_fichero_a_guardar)
+                # os.remove(nombre_fichero_qr_a_guardar)
+                # # os.remove(filenames_list)
+                # # os.remove(nombre_fichero_qr_temp)
+                # # os.remove(nombre_fichero_qr_temp_reescalado)
+                # # os.remove('temp_resized_gif.gif')
 
             except Exception as e:
-                logger.error("Exception scaling image, message: ", exc_info=True)
+                logger.error(f"Exception escalando la imagen con URL: {url_imagen}, mensaje: ", exc_info=True)
 
         else:  # si la imagen que se ha subido desde la URL resulta vacía.
-            logger.info("WARNING Empty image returned from load_image_from_url: ")
+            logger.info(f"WARNING Imagen vacia al intentar cargarla, URL: {url_imagen}")
 
         # Fin de análisi de todas las imágenes de un BATCH
 
