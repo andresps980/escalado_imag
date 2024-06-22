@@ -103,6 +103,7 @@ def get_message_body(message):
     sent_timestamp = int(datetime.datetime.fromtimestamp(
         int(message['Attributes']['SentTimestamp']) / 1000
     ).timestamp())
+    # TODO porque queremos esto?
     sent_date_time = datetime.datetime.fromtimestamp(int(message['Attributes']['SentTimestamp']) / 1000)
     message_body['SentTimestamp'] = sent_timestamp
 
@@ -160,7 +161,9 @@ def process_images(paths, logger):
     for i in keyList:
         dict_resultados[i] = None
 
-    for path in paths:  # Recorremos todas las imagenes del Bath
+    for path in paths:
+
+        logger.info('--------------- Comienzo procesamiento ---------------')
 
         # TODO Andres: Para pruebas de imagen voy a guardar de momento en un dir por escalado
         characters = string.ascii_letters
@@ -172,20 +175,14 @@ def process_images(paths, logger):
         # Tenemos una entrada de un json con la URL de la imagen y la url de click.
         # Tenemos que obtener URL de ambas.
         # path es un DICT
-
         url_imagen = path['url_ad']
         url_click = path['url_click']
         timestamp_creacion = path['SentTimestamp']
 
         # Descargamos la imagen desde el CDN del anunciante y calculamos algunos datos de ella
-
         try:
             # Intentamos leer la imagen desde la URL recibida
             tipo_imagen, imagen, filenames_list, durations_list = load_image_from_url(url_imagen, temp_folder, logger)
-            # tipo_imagen , imagen , filenames_list, durations_list = load_image_from_url_memory(url_imagen)
-
-            # print ("\nmuestra de imagen cargada : ")
-            # imagen.show()
 
         except Exception as e:
             logger.error("Exception calling load_image_from_url, message: ", exc_info=True)
@@ -198,159 +195,42 @@ def process_images(paths, logger):
                 bucket_s3_imagenes = "s3://" + bucket_name_imagenes
                 bucket_s3_qrs = "s3://" + bucket_name_qrs
 
-                # Obtenemos el nombre de fichero de imagen
+                # Obtenemos el nombre de fichero de imagen y qr
                 nombre_fichero_imagen = obtiene_nombre_fichero(url_imagen)
-
-                # print ('\nnombre_fichero_imagen : ',nombre_fichero_imagen)
-
-                # Obtenemos los nombres de los ficheros a guardar
                 nombre_fichero_imagen_a_guardar = nombre_fichero_imagen + '.img'
                 nombre_fichero_qr_a_guardar = nombre_fichero_imagen + '.qr'
-
-                # print ("nombre_fichero_imagen_a_guardar : ",nombre_fichero_imagen_a_guardar)
-                # print ("nombre_fichero_qr_a_guardar :  ",nombre_fichero_qr_a_guardar)
 
                 nombre_fichero_imagenes_a_guardar_s3 = bucket_s3_imagenes + "/" + nombre_fichero_imagen_a_guardar
                 nombre_fichero_qr_a_guardar_s3 = bucket_s3_qrs + "/" + nombre_fichero_qr_a_guardar
 
-                # print ("nombre_fichero_imagenes_a_guardar_s3 : ",nombre_fichero_imagenes_a_guardar_s3)
-                # print ("nombre_fichero_qr_a_guardar_s3 : ", nombre_fichero_qr_a_guardar_s3 )
+                # Hacemos un preprocesado de los QRs:  las dimensiones y color adecuado a la imagen Obtenemos el
+                # valor de la nuevas dimensiones reescaladas para formato TV de la primera imagen de la lista También
+                # obtenemos el color dominante para los pixeles del QR pero que resalten sobre fondo blanco
+                dim, dominant_color, target_size = extraer_info_imagen(filenames_list, imagen, logger, tipo_imagen)
 
-                # Hacemos un proprocesado de los QRs:  las dimensiones y color adecuado a la imagen
-                # Obtenemos el valor de la nuevas dimensiones reescaladas para formato TV de la primera imagen de la lista
-                # También obtenemos el color dominante para los pixeles del QR pero que resalten sobre fondo blanco
-
-                if tipo_imagen == 'png':
-
-                    dim = calcula_dimensiones_reescalado(imagen)
-
-                    target_size = int((min(dim[0], dim[1])) * 0.9)
-                    # print  (target_size)
-
-                    target_size = int(min(dim[0], dim[1]))
-
-                    # Use ColorThief with the JPEG image
-
-                    try:
-
-                        # Comprobamos si la imagen es predominantemente clara
-                        is_white = is_predominantly_white(imagen)
-
-                        if is_white:
-                            # print("The image is predominantly white.")
-                            dominant_color = (0, 0, 0)
-                            # print ('dominant_color png  basico',dominant_color)
-
-
-                        else:
-                            # print("The image has a dark enough color to be seen against a mostly white background.")
-                            color_thief = ColorThief(filenames_list[0])
-
-                            # Get the dominant color
-                            dominant_color = color_thief.get_color(quality=1)
-                            # print ('dominant_color png ',dominant_color)
-
-                    except Exception as e:
-                        logger.error("Exception calculando color predominante PNG, mensaje: ", exc_info=True)
-                        dominant_color = (0, 0, 0)
-                        # print ('dominant_color png except',dominant_color)
-
-                if (tipo_imagen == 'gif'):
-
-                    dim = calcula_dimensiones_reescalado(imagen)
-
-                    target_size = int((min(dim[0], dim[1])) * 0.9)
-                    # print  (target_size)
-
-                    target_size = int(min(dim[0], dim[1]))
-
-                    # Obtenemos el primer frame de la imagen GIF
-                    frame = Image_pil.open(filenames_list[0])
-
-                    try:
-
-                        # Comprobamos si la imagen es predominantement clara
-                        is_white = is_predominantly_white(frame)
-
-                        if is_white:
-                            # print("The image is predominantly white.")
-                            dominant_color = (0, 0, 0)
-                            # print ('dominant_color gif  basico',dominant_color)
-
-                        else:
-                            # print("The image has a dark enough color to be seen against a mostly white background.")
-                            color_thief = ColorThief(filenames_list[0])
-
-                            # Get the dominant color
-                            dominant_color = color_thief.get_color(quality=1)
-                            # print ('dominant_color gif ',dominant_color)
-
-                    except Exception as e:
-                        logger.error("Exception calculando color predominante GIF, mensaje: ", exc_info=True)
-                        dominant_color = (0, 0, 0)
-                        # print ('gif dominant_color gif except ',dominant_color)
-
-                if (tipo_imagen == 'jpeg'):
-
-                    dim = calcula_dimensiones_reescalado(imagen)
-
-                    target_size = int((min(dim[0], dim[1])) * 0.9)
-                    # print  (target_size)
-
-                    target_size = int(min(dim[0], dim[1]))
-
-                    try:
-
-                        # Comprobamos si la imagen es predominantemente clara
-                        is_white = is_predominantly_white(imagen)
-
-                        if is_white:
-                            # print("The image is predominantly white.")
-                            dominant_color = (0, 0, 0)
-                            # print ('dominant_color jpeg basico ',dominant_color)
-
-
-                        else:
-                            # print("The image has a dark enough color to be seen against a mostly white background.")
-                            color_thief = ColorThief(filenames_list[0])
-
-                            # Get the dominant color
-                            dominant_color = color_thief.get_color(quality=1)
-                            # print ('dominant_color jpeg  ',dominant_color)
-                    except Exception as e:
-                        logger.error("Exception calculando color predominante JPEG, mensaje: ", exc_info=True)
-                        dominant_color = (0, 0, 0)
-                        # print ('dominant_color jpeg except ',dominant_color)
-
+                # TODO Terminar de decidir como va esto... si todo va a ser modelo 5...
                 # Ahora tenemos que elegir el modelos de ampliación a aplicar y su calidad
                 # La estrategia es las imágenes prequeñas 300x600 p. ej multiplar por x4 y más calidad
                 # y reducir o ampliar el ajuste final por CV2 hasta el resultado necesario
-
                 # El resto multiplicar por x2 y reducir por CV2 hasta tamaño necesario
-
                 # Elección de modelo de superesolución Para imágenes pequeñas usamos más calidad y x4 (más lento)
                 if dim == (300, 100) or dim == (300, 250):
                     modelo = 4  # modelo x4 y mejor calidad al ser un formato pequeño de partida
                 else:
                     modelo = 5  # modelo x2 y reduccion posterior
-
                 modelo = 5
 
+                # TODO Terminar de definir esta parte, de momento el mismo url_short para todos
                 # Calculamos y guardamos el valor de la url_corta con la api de nuestro proveedor externo
                 domain = '9h5q.short.gy'
                 url_click_short = obtiene_url_short(domain, url_click)
 
-                ###### Creamos el código QR
-
-                # qr_image = make_qr ( url_click_short )
-
                 # Creamos un qr y obtenemos el nombre del fichero donde se ha creado
                 nombre_fichero_qr_temp = make_qr(temp_folder, url_click_short, dominant_color, light_='white')
-
+                # TODO Eliminar esta asignacion???
                 qr_image = Image_pil.open(nombre_fichero_qr_temp)
 
                 # Ajustamos el QR al tamaño determinado para este tipo
-
                 if target_size > 300:
                     target_size = 300
 
@@ -366,24 +246,21 @@ def process_images(paths, logger):
                 nombre_fichero_qr_a_guardar = os.path.join(temp_folder, nombre_fichero_qr_a_guardar)
                 qr_image_reescalado.save(nombre_fichero_qr_a_guardar, format='PNG')
 
-                # Mostramos en modo prueba el gif generado con color y tamaño definitivo
-
-                # qr_image_reescalado.show()
-
-                ###########
-
                 # Tenemos que comprobar el tipo de imagen que hemos obtenido
                 tipo_imagen = identify_filetype(imagen)
+                logger.info(f'Nombre fichero imagen img: {nombre_fichero_imagen_a_guardar}')
+                logger.info(f'Nombre fichero imagen qr: {nombre_fichero_qr_a_guardar}')
+                logger.info(f'Nombre fichero imagen img en s3: {nombre_fichero_imagenes_a_guardar_s3}')
+                logger.info(f'Nombre fichero imagen qr en s3: {nombre_fichero_qr_a_guardar_s3}')
+                logger.info(f'Tipo de imagen obtenida: {tipo_imagen}')
 
-                # print ("tipo de imagen : ", tipo_imagen )
-
-                # si el tipo de imagen es GIF animado, tenemos que ver cuantas images tine
+                # si el tipo de imagen es GIF animado, tenemos que ver cuantas images tiene
                 # Recorvertir una a uno cada frame a tipo admisible por CV2
                 # reescarlarlas
                 # Volver a montar el GIF animado con los PNGs reescalados
 
                 # TODO Andres: Elegir donde inicializar lo siguiente
-                # TODO Seguramente tengamos que hacer la selccion a CPU de test_cuda
+                # TODO Seguramente tengamos que hacer la seleccion a CPU de test_cuda
                 sr = cv2.dnn_superres.DnnSuperResImpl_create()
 
                 if tipo_imagen == 'gif':
@@ -406,77 +283,8 @@ def process_images(paths, logger):
                     make_gif(resized_gif_frames_files, durations_list, nombre_fichero_a_guardar, 1)
                     logger.info(f'Numero frames imagen final gif: {get_total_frames(nombre_fichero_a_guardar)}')
 
-                    # TODO Andres saltamos esta comprobacion...
-                    # Presentamos el gif animado en pantalla
-                    # print("Muestra del GIF animado reescalado : ")
-                    # display(DisplayImage(filename=nombre_fichero_a_guardar))
-
-                '''
-                  if tipo_imagen == 'gif' :
-
-                      resized_gif_frames_files = []
-
-                      # Por este camino vamos a rehacer todas las imagenes del gif al nuevo tamaño.
-
-                      for file in filenames_list :   #lista de todas las imagenes que se compone el gif.
-
-                            # Obtenemos la imagen reescalada con esta función
-
-                            #Cargamos el fichero png del frame
-
-                            #Cargamos el primer frame de GIF animado tipo PNG
-                            imagen_aux = Image_pil.open(file)
-
-                            #Convertimos el frame a imagen RGB que pueda usarse en CV2 para reescalado
-                            static_image = imagen_aux.convert('RGB')
-
-                            # Obtenemeos una imagén de nuevo PIL PNG escalada al formado adecuado
-                            resized_image = procedimiento_de_reescalado_imagen_por_ai (modelo , static_image , sr)
-
-                            # A modo de prueba vemos el resultado de frame intermedio del GIf ya reescalado
-                            #print ("Muestra del frame : ", file, " de un GIF ya reescalado ")
-                            #resized_image.show()
-
-                            #Guardamos en disco la imagen ampliada que viene y se guarda en PNG
-                            #sustituyendo con el nombre del fichero de frame que habíamos leido antes de escalar
-                            resized_image.save( file , format='PNG')
-
-                            #lista de ficheros guardado reacondicionados
-
-                            #Añadimos la imagen redimensionada a la lista de imagenes que componen el gif
-                            resized_gif_frames_files = resized_gif_frames_files + [file]
-
-
-                      #Ahora ya tenemos todos los frames del GIF redimensionados y los vamos a remontar en un nuevo gif
-                      #Para ello tomamos la lista de frames 'resized_gif_frames' y los tiempos de transición 'durations_list'
-
-                      print ("total de resized_gif_frames_files : ", len(resized_gif_frames_files))
-
-                      # Create and Save the animated GIF como "temp_resized_gif.gif" and LOOP 'ON'
-
-                      # Generate a random string of two characters
-                      #characters = string.ascii_letters
-                      #random_string = ''.join(random.choice(characters) for _ in range(2))
-                      #nombre_fichero_gif_temp = 'temp_resized_gif_'+random_string+'.gif'
-
-                      nombre_fichero_a_guardar = "TONTO_"+nombre_fichero_imagen+'.gif'
-
-                      print (nombre_fichero_a_guardar)
-
-                      %time make_gif ( resized_gif_frames_files , durations_list , nombre_fichero_a_guardar , 0) # 1 = Bucle aninamición = ON
-                      #make_gif ( resized_gif_frames_files , durations_list , 'temp_resized_gif.gif'  , 0) # 1 = Bucle aninamición = ON
-
-                      print ("Numero frames imagen final gif : ", get_total_frames( nombre_fichero_a_guardar  ) )
-
-                      #print ("Muestra del GIF animado reescalado : ", im.size )
-
-
-                      #Presentamos el gif animado en pantalla
-                      print ("Muestra del GIF animado reescalado : " )
-                      display(DisplayImage(filename= nombre_fichero_a_guardar))
-                      '''
-
                 if tipo_imagen == 'png':
+                    # TODO Que hacemos con los PNG?
                     pass
 
                     '''
@@ -495,6 +303,7 @@ def process_images(paths, logger):
                       '''
 
                 if tipo_imagen == 'jpeg':
+                    # TODO Que hacemos con los PNG?
                     pass
 
                     '''
@@ -514,7 +323,7 @@ def process_images(paths, logger):
 
                       '''
 
-                # Ya tneemos la imagen redimensionada tanto si es un GIF como no
+                # Ya tenemos la imagen redimensionada tanto si es un GIF como no
                 # También tenemos la imagen del QR generado
 
                 # write resized image + qr image  to S3 buckets
@@ -622,6 +431,37 @@ def process_images(paths, logger):
         # Fin de análisi de todas las imágenes de un BATCH
 
     return  # de toda la función de reescalado , generacion de QRs y de subida a almancenamiento S3
+
+
+def extraer_info_imagen(filenames_list, imagen, logger, tipo_imagen):
+    dim = calcula_dimensiones_reescalado(imagen)
+    # TODO Por que nos inicializaciones???
+    target_size = int((min(dim[0], dim[1])) * 0.9)
+    logger.info(f'Tamaño final destino 1: {target_size}')
+    target_size = int(min(dim[0], dim[1]))
+    logger.info(f'Tamaño final destino 2: {target_size}')
+    # Use ColorThief with the JPEG image
+    try:
+        # Comprobamos si la imagen es predominantemente clara
+        if tipo_imagen == 'gif':
+            # Obtenemos el primer frame de la imagen GIF
+            frame = Image_pil.open(filenames_list[0])
+            is_white = is_predominantly_white(frame)
+        else:
+            is_white = is_predominantly_white(imagen)
+
+        if is_white:
+            dominant_color = (0, 0, 0)
+        else:
+            color_thief = ColorThief(filenames_list[0])
+            # Get the dominant color
+            dominant_color = color_thief.get_color(quality=1)
+
+        logger.info(f'Color dominante para el tipo {tipo_imagen}: {dominant_color}')
+    except Exception as e:
+        logger.error("Exception calculando color predominante PNG, mensaje: ", exc_info=True)
+        dominant_color = (0, 0, 0)
+    return dim, dominant_color, target_size
 
 
 # TODO ANDRES, revisar las posibilidades de este codigo con cuenta Free...

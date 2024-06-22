@@ -10,19 +10,15 @@ from PIL import Image as Image_pil
 def make_qr(temp_folder, text_, coordenadas_color_, light_='white'):
     qrcode = segno.make(text_)
 
-    # Save the QR code as a PNG file
-
     # Generate a random string of two characters
     characters = string.ascii_letters
     random_string = ''.join(random.choice(characters) for _ in range(2))
 
+    # Save the QR code as a PNG file
     nombre_fichero_qr_temp = os.path.join(temp_folder, 'qr_temp' + random_string + '.png')
-
-    # qrcode.save('qr_temp.png', scale=10, dark=coordenadas_color_, light = light_ )
     qrcode.save(nombre_fichero_qr_temp, scale=10, dark=coordenadas_color_, light=light_)
 
     # Devolvemos el valor de nombre ramdom del fichero temporal del qr
-
     return nombre_fichero_qr_temp
 
 

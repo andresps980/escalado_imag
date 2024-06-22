@@ -37,8 +37,8 @@ def configura_logs(args):
     f_handler.setLevel(dame_nivel_log(args.LogLevel))
 
     # Create formatters and add it to handlers
-    c_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    f_format = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    c_format = logging.Formatter('%(asctime)s - %(name)s - [%(levelname)s] [%(threadName)s] - %(message)s')
+    f_format = logging.Formatter('%(asctime)s - %(name)s - [%(levelname)s] [%(threadName)s] - %(message)s')
     c_handler.setFormatter(c_format)
     f_handler.setFormatter(f_format)
 
