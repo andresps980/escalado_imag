@@ -22,13 +22,13 @@ def make_qr(temp_folder, text_, coordenadas_color_, light_='white'):
     return nombre_fichero_qr_temp
 
 
-def adjust_qr_to_target_size(qr_file, target_size, temp_folder):
+def adjust_qr_to_target_size(qr_file, target_size, temp_folder, logger):
     # Open the PNG file using Pillow
 
     try:
         qr = Image_pil.open(qr_file)
-    except IOError:
-        print("Could not open file: " + qr_file)
+    except Exception as e:
+        logger.error(f"Exception abriendo archivo qr: {qr_file}, mensaje: ", exc_info=True)
         return None
 
     # Generate a random string of two characters
@@ -45,7 +45,7 @@ def adjust_qr_to_target_size(qr_file, target_size, temp_folder):
     new_width = round(target_size * qr_aspect_ratio)
     new_height = round(target_size / qr_aspect_ratio)
 
-    nombre_fichero_qr_temp = os.path.join(temp_folder, 'qr_temp' + random_string + '.png')
+    nombre_fichero_qr_temp = os.path.join(temp_folder, 'qr_temp_reescalado_' + random_string + '.png')
 
     # Resize the QR code to the new dimensions
     resized_qr_image = qr.resize((new_width, new_height), resample=Image_pil.LANCZOS)

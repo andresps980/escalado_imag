@@ -26,7 +26,6 @@ if __name__ == '__main__':
         exit(-1)
 
     while True:
-
         num_max_messages = 100
         file_list_json = get_messages_from_sqs_parallel(sqs, queue_url, num_max_messages, logger)
         logger.info(f"Número de ficheros e imagenes {len(file_list_json)}")
@@ -38,15 +37,16 @@ if __name__ == '__main__':
 
         start_time = time.time()
 
+        # TODO elegir/configurar el numero de elementos por batch
         # Split json lists into batches
-        batch_size = 40
+        batch_size = 10
         batches = [file_list_json[i:i + batch_size] for i in range(0, len(file_list_json), batch_size)]
         logger.info(f"Número de batches {len(batches)}")
 
         # Create a process pool with one process per CPU core
-        max_workers = 20
+        max_workers = 10
         # Create a thread pool executor
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix='process_images') as executor:
             # Apply process_images function to each batch of image paths asynchronously
             results = [executor.submit(process_images, batch, logger) for batch in batches]
 

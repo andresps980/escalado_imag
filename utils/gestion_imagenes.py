@@ -50,7 +50,6 @@ def save_gif_frames(image, temp_folder):
             if len(filenames) > 20:
                 # filenames = filenames[0:50]
                 # durations = durations[0:50]
-
                 filenames = filenames
                 durations = durations
 

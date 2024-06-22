@@ -150,6 +150,7 @@ def process_images(paths, logger):
     bucket_name_imagenes = BUCKET_ADS
     bucket_name_qrs = BUCKET_QRS
 
+    # TODO Cual era el objetivo?
     # DEfinimos un dict de los resultados
     dict_resultados = {}
 
@@ -180,13 +181,7 @@ def process_images(paths, logger):
         timestamp_creacion = path['SentTimestamp']
 
         # Descargamos la imagen desde el CDN del anunciante y calculamos algunos datos de ella
-        try:
-            # Intentamos leer la imagen desde la URL recibida
-            tipo_imagen, imagen, filenames_list, durations_list = load_image_from_url(url_imagen, temp_folder, logger)
-
-        except Exception as e:
-            logger.error("Exception calling load_image_from_url, message: ", exc_info=True)
-            imagen = None
+        tipo_imagen, imagen, filenames_list, durations_list = load_image_from_url(url_imagen, temp_folder, logger)
 
         if imagen is not None:
             try:
@@ -207,6 +202,8 @@ def process_images(paths, logger):
                 # valor de la nuevas dimensiones reescaladas para formato TV de la primera imagen de la lista También
                 # obtenemos el color dominante para los pixeles del QR pero que resalten sobre fondo blanco
                 dim, dominant_color, target_size = extraer_info_imagen(filenames_list, imagen, logger, tipo_imagen)
+                logger.info(f'Tamaño final destino 2: {target_size}')
+                logger.info(f'Color dominante para el tipo {tipo_imagen}: {dominant_color}')
 
                 # TODO Terminar de decidir como va esto... si todo va a ser modelo 5...
                 # Ahora tenemos que elegir el modelos de ampliación a aplicar y su calidad
@@ -237,7 +234,8 @@ def process_images(paths, logger):
                 # Generamos un QR reescalado y obtnemos el valor del fichero donde se ha depositado
                 nombre_fichero_qr_temp_reescalado = adjust_qr_to_target_size(nombre_fichero_qr_temp,
                                                                              target_size,
-                                                                             temp_folder)
+                                                                             temp_folder,
+                                                                             logger)
 
                 # Abrimos la imagen del QR reescalado desde disco
                 qr_image_reescalado = Image_pil.open(nombre_fichero_qr_temp_reescalado)
@@ -283,45 +281,29 @@ def process_images(paths, logger):
                     make_gif(resized_gif_frames_files, durations_list, nombre_fichero_a_guardar, 1)
                     logger.info(f'Numero frames imagen final gif: {get_total_frames(nombre_fichero_a_guardar)}')
 
-                if tipo_imagen == 'png':
+                elif tipo_imagen == 'png':
                     # TODO Que hacemos con los PNG?
-                    pass
+                    # pass
+                    # Aplicamos el proceso de reescalado de la imagen a la única que hay en la lista de frames.
+                    resized_image = procedimiento_de_reescalado_imagen_por_ai(modelo, imagen, sr)
+                    # Guardamos en disco
+                    with resized_image as im:
+                        # Guardamnos el png
+                        nombre_fichero_a_guardar = os.path.join(temp_folder, "TONTO_" + nombre_fichero_imagen + '.png')
+                        im.save(nombre_fichero_a_guardar, format='PNG')
+                    logger.info(f'Nombre fichero a guardar: {nombre_fichero_a_guardar}')
 
-                    '''
-                      #Aplicamos el proceso de reescalado de la imagen a la única que hay en la lista de frames.
-                      resized_image = procedimiento_de_reescalado_imagen_por_ai (modelo , imagen , sr)
-
-                      #Guardamos en disco
-                      with resized_image as im:
-                          nombre_fichero_a_guardar = nombre_fichero_imagen+'.img'
-                          # Guardamnos el png
-                          im.save(nombre_fichero_a_guardar , format='PNG')
-
-
-                      #print ("Muestra del fichero PNG reescalado : ",im.size)
-                      #im.show()
-                      '''
-
-                if tipo_imagen == 'jpeg':
+                elif tipo_imagen == 'jpeg':
                     # TODO Que hacemos con los PNG?
-                    pass
-
-                    '''
-                      #Aplicamos el proceso de reescalado de la imagen a la única que hay en la lista de frames.
-                      resized_image = procedimiento_de_reescalado_imagen_por_ai (modelo , imagen , sr )
-
-                      #Guardamos en disco
-                      with resized_image as im:
-                          nombre_fichero_a_guardar = nombre_fichero_imagen+'.img'
-                          # Guardamnos el png
-                          im.save(nombre_fichero_a_guardar , format='PNG')
-
-                      #print ("Muestra del de fichero JPEG reescalado : ", im.size)
-                      #im.show()
-
-                      #display(Image_Ipython(filename='temp_resized_jpg.jpeg'))
-
-                      '''
+                    # pass
+                    # Aplicamos el proceso de reescalado de la imagen a la única que hay en la lista de frames.
+                    resized_image = procedimiento_de_reescalado_imagen_por_ai(modelo, imagen, sr)
+                    # Guardamos en disco
+                    with resized_image as im:
+                        nombre_fichero_a_guardar = os.path.join(temp_folder, "TONTO_" + nombre_fichero_imagen + '.jpeg')
+                        # Guardamnos el png
+                        im.save(nombre_fichero_a_guardar, format='JPEG')
+                    logger.info(f'Nombre fichero a guardar: {nombre_fichero_a_guardar}')
 
                 # Ya tenemos la imagen redimensionada tanto si es un GIF como no
                 # También tenemos la imagen del QR generado
@@ -435,11 +417,9 @@ def process_images(paths, logger):
 
 def extraer_info_imagen(filenames_list, imagen, logger, tipo_imagen):
     dim = calcula_dimensiones_reescalado(imagen)
-    # TODO Por que nos inicializaciones???
+    # TODO Por que dos inicializaciones???
     target_size = int((min(dim[0], dim[1])) * 0.9)
-    logger.info(f'Tamaño final destino 1: {target_size}')
     target_size = int(min(dim[0], dim[1]))
-    logger.info(f'Tamaño final destino 2: {target_size}')
     # Use ColorThief with the JPEG image
     try:
         # Comprobamos si la imagen es predominantemente clara
@@ -457,7 +437,6 @@ def extraer_info_imagen(filenames_list, imagen, logger, tipo_imagen):
             # Get the dominant color
             dominant_color = color_thief.get_color(quality=1)
 
-        logger.info(f'Color dominante para el tipo {tipo_imagen}: {dominant_color}')
     except Exception as e:
         logger.error("Exception calculando color predominante PNG, mensaje: ", exc_info=True)
         dominant_color = (0, 0, 0)
@@ -478,8 +457,6 @@ def obtiene_url_short(domain, url_click):
 
     res.raise_for_status()
     data = res.json()
-
-    # print (data['shortURL'])
 
     return data['shortURL']
 
