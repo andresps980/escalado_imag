@@ -41,7 +41,8 @@ AWS_REGION = 'eu-west-1'
 MYKEY = 'XXxxxxxxxxx'
 MYSECRET = 'xxxxxx'
 
-TABLE_NAME = 'mostaza_resizing_ads'
+# CREACION PARA DYNAMO_DB
+TABLE_NAME = 'bitv_ads_transform'
 
 # Buckets de S3 a emplear
 BUCKET_QRS = 'bitv-qrs'
@@ -54,15 +55,11 @@ def create_session(logger):
         aws_secret_access_key=MYSECRET,
         region_name=AWS_REGION)
 
+    # TODO Haremos que cada worker tenga su propia sesion para dinamo y s3
     # CREACION PARA S3
-    s3 = session_aws.client('s3')
-
-    # CREACION PARA DYNAMO_DB
-    # specify the table name
-    table_name = 'bitv_ads_transform'
-
+    # s3 = session_aws.client('s3')
     # Create a DynamoDB client using the session
-    dynamodb = session_aws.client('dynamodb')
+    # dynamodb = session_aws.client('dynamodb')
 
     # CREACION PARA SQS
     queue_name = 'bitv_ad_transform'
@@ -95,7 +92,7 @@ def create_session(logger):
     except Exception as e:
         logger.error("Exception general, creando acceso a colas", exc_info=True)
 
-    return session_aws, s3, dynamodb, sqs, queue_url
+    return session_aws, sqs, queue_url
 
 
 def get_message_body(message):
@@ -146,10 +143,47 @@ def get_messages_from_sqs_parallel(sqs, queue_url, num_messages, logger):
     return messages
 
 
-def process_images(paths, logger):
-    bucket_name_imagenes = BUCKET_ADS
-    bucket_name_qrs = BUCKET_QRS
+def crear_tabla_dinamodb(session_aws):
+    # Define the schema of the table
+    dydb = session_aws.client('dynamodb')
+    key_schema = [
+        {
+            'AttributeName': 'nombre_imagen',
+            'KeyType': 'HASH'
+        }
+    ]
 
+    attribute_definitions = [
+        {
+            'AttributeName': 'nombre_imagen',
+            'AttributeType': 'S'
+        }
+    ]
+    # Create a new DynamoDB table
+    response = dydb.create_table(
+        TableName=TABLE_NAME,
+        KeySchema=key_schema,
+        AttributeDefinitions=attribute_definitions,
+        ProvisionedThroughput={
+            'ReadCapacityUnits': 10,
+            'WriteCapacityUnits': 10
+        },
+    )
+
+    # Wait for the table to be created
+    waiter = dydb.get_waiter('table_exists')
+    waiter.wait(TableName=table_name)
+
+    # Print the table description
+    table_description = dydb.describe_table(TableName=table_name)
+    # print(f"Table '{table_name}' created successfully!")
+    # print("Table description:")
+    # print(table_description)
+    # Instantiate the DynamoDB table object
+    return table_description
+
+
+def process_images(paths, logger, session_aws):
     # TODO Cual era el objetivo?
     # DEfinimos un dict de los resultados
     dict_resultados = {}
@@ -161,6 +195,13 @@ def process_images(paths, logger):
     # iterating through the elements of list
     for i in keyList:
         dict_resultados[i] = None
+
+    table = dame_tabla_dinamodb(logger, session_aws)
+    if table is None:
+        logger.error(f'Salimos del proceso, {len(paths)} imagenes no seran procesadas')
+        return
+
+    s3 = session_aws.client('s3')
 
     for path in paths:
 
@@ -185,18 +226,11 @@ def process_images(paths, logger):
 
         if imagen is not None:
             try:
-                # Proceso general de UNA imagen del BATCH
-                # Preparamos ficheros generales y nombres.
-                bucket_s3_imagenes = "s3://" + bucket_name_imagenes
-                bucket_s3_qrs = "s3://" + bucket_name_qrs
-
                 # Obtenemos el nombre de fichero de imagen y qr
                 nombre_fichero_imagen = obtiene_nombre_fichero(url_imagen)
+                # TODO Andres, mejor dejar la terminacion como el tipo?
                 nombre_fichero_imagen_a_guardar = nombre_fichero_imagen + '.img'
                 nombre_fichero_qr_a_guardar = nombre_fichero_imagen + '.qr'
-
-                nombre_fichero_imagenes_a_guardar_s3 = bucket_s3_imagenes + "/" + nombre_fichero_imagen_a_guardar
-                nombre_fichero_qr_a_guardar_s3 = bucket_s3_qrs + "/" + nombre_fichero_qr_a_guardar
 
                 # Hacemos un preprocesado de los QRs:  las dimensiones y color adecuado a la imagen Obtenemos el
                 # valor de la nuevas dimensiones reescaladas para formato TV de la primera imagen de la lista También
@@ -224,7 +258,6 @@ def process_images(paths, logger):
 
                 # Creamos un qr y obtenemos el nombre del fichero donde se ha creado
                 nombre_fichero_qr_temp = make_qr(temp_folder, url_click_short, dominant_color, light_='white')
-                # TODO Eliminar esta asignacion???
                 qr_image = Image_pil.open(nombre_fichero_qr_temp)
 
                 # Ajustamos el QR al tamaño determinado para este tipo
@@ -248,8 +281,6 @@ def process_images(paths, logger):
                 tipo_imagen = identify_filetype(imagen)
                 logger.info(f'Nombre fichero imagen img: {nombre_fichero_imagen_a_guardar}')
                 logger.info(f'Nombre fichero imagen qr: {nombre_fichero_qr_a_guardar}')
-                logger.info(f'Nombre fichero imagen img en s3: {nombre_fichero_imagenes_a_guardar_s3}')
-                logger.info(f'Nombre fichero imagen qr en s3: {nombre_fichero_qr_a_guardar_s3}')
                 logger.info(f'Tipo de imagen obtenida: {tipo_imagen}')
 
                 # si el tipo de imagen es GIF animado, tenemos que ver cuantas images tiene
@@ -305,12 +336,25 @@ def process_images(paths, logger):
                         im.save(nombre_fichero_a_guardar, format='JPEG')
                     logger.info(f'Nombre fichero a guardar: {nombre_fichero_a_guardar}')
 
+                # TODO Revisar la gestion de nombres, estamos cogiendo realmente el reescalado?
+                bucket_name_imagenes = BUCKET_ADS
+                bucket_name_qrs = BUCKET_QRS
+                bucket_s3_imagenes = "s3://" + bucket_name_imagenes
+                bucket_s3_qrs = "s3://" + bucket_name_qrs
+                nombre_fichero_imagenes_a_guardar_s3 = bucket_s3_imagenes + "/" + nombre_fichero_imagen_a_guardar
+                nombre_fichero_qr_a_guardar_s3 = bucket_s3_qrs + "/" + nombre_fichero_qr_a_guardar
+                logger.info(f'Nombre fichero imagen img en s3: {nombre_fichero_imagenes_a_guardar_s3}')
+                logger.info(f'Nombre fichero imagen qr en s3: {nombre_fichero_qr_a_guardar_s3}')
                 # Ya tenemos la imagen redimensionada tanto si es un GIF como no
                 # También tenemos la imagen del QR generado
 
                 # write resized image + qr image  to S3 buckets
                 # s3.put_object(Bucket='mostaza_ads', Key=nombre_fichero_imagen+'.img', Body=resized_image.tobytes())
                 # s3.put_object(Bucket='mostaza_qrs_ads', Key=nombre_fichero_imagen+'.qr', Body=qr_image.tobytes())
+                s3.put_object(Bucket=bucket_name_imagenes, Key=nombre_fichero_imagen + '.img',
+                              Body=resized_image.tobytes())
+                # TODO Este no parece el reescalado qr
+                s3.put_object(Bucket=bucket_name_qrs, Key=nombre_fichero_imagen + '.qr', Body=qr_image.tobytes())
 
                 # Ahora vamos a guardar los valores en un diccionario transitorio que luego subiremos en bulk a Dynamo
                 # Añadimos valores al diccionario
@@ -327,21 +371,32 @@ def process_images(paths, logger):
 
                 # Subo los resultados a Dynamo
 
-                Item = {
+                # item = {
+                #     'nombre_imagen': str(nombre_fichero_imagen),
+                #     'SentTimestamp': timestamp_creacion,
+                #     'url_ad': url_imagen,
+                #     'url_click': url_click,
+                #     's3_url_imagen': nombre_fichero_imagenes_a_guardar_s3,
+                #     's3_url_qr': nombre_fichero_qr_a_guardar_s3,
+                #     'url_click_short': url_click_short,
+                # }
+
+                item = {
                     'nombre_imagen': str(nombre_fichero_imagen),
                     'SentTimestamp': timestamp_creacion,
                     'url_ad': url_imagen,
                     'url_click': url_click,
-                    's3_url_imagen': 's3://mostaza_ads/' + nombre_fichero_imagenes_a_guardar_s3,
-                    's3_url_qr': 's3://mostaza_qrs_ads/' + nombre_fichero_qr_a_guardar_s3,
-                    'url_click_short': url_click_short,
-                },
+                    's3_url_imagen': nombre_fichero_imagenes_a_guardar_s3,
+                    's3_url_qr': nombre_fichero_qr_a_guardar_s3,
+                    'url_click_short': 'TESTTTT',
+                }
 
                 # TODO Andres: De momento no subimos las imagenes hasta controlar la prueba...
-                # bulk_load_items(Item, table)
+                bulk_load_items(item, table)
 
                 ########
 
+                # TODO Esta parte parece que ya esta hecha arriba...
                 # Procedemos a la subida a S3 de los ficheos de imagen
 
                 '''
@@ -415,6 +470,28 @@ def process_images(paths, logger):
     return  # de toda la función de reescalado , generacion de QRs y de subida a almancenamiento S3
 
 
+def dame_tabla_dinamodb(logger, session_aws):
+    # Abrimos session para dinamo y creamos tabla si no existe
+    dynamodb = boto3.resource(
+        'dynamodb',
+        aws_access_key_id=MYKEY,
+        aws_secret_access_key=MYSECRET,
+        region_name=AWS_REGION
+    )
+    table = None
+    try:
+        table = dynamodb.Table(TABLE_NAME)
+    except dynamodb.exceptions.ResourceNotFoundException:
+        # TODO Probar la creacion de la tabla...
+        table_description = crear_tabla_dinamodb(session_aws)
+        table = dynamodb.Table(TABLE_NAME)
+        logger.warning(f'Tabla {TABLE_NAME} no existe y sera creada.', exc_info=True)
+    except Exception as e:
+        logger.error(f"Exception general creando la tabla: {TABLE_NAME}, mensaje: ", exc_info=True)
+        table = None
+    return table
+
+
 def extraer_info_imagen(filenames_list, imagen, logger, tipo_imagen):
     dim = calcula_dimensiones_reescalado(imagen)
     # TODO Por que dos inicializaciones???
@@ -462,50 +539,55 @@ def obtiene_url_short(domain, url_click):
 
 
 # Funcion de subida masiva de ficheros de anunciós captuardos a mano a Dynamo DB en parametros_del_modelo
-def bulk_load_items(items, table):
-    def process_item(item):
-        url_imagen_aux = item['url_ad']
-        url_click_aux = item['url_click']
+def bulk_load_items(item, table):
+    table.put_item(
+        Item=item,
+    )
 
-        nombre_imagen_aux = str(obtiene_nombre_fichero(url_imagen_aux))
+    # def process_item(item):
+    #     url_imagen_aux = item['url_ad']
+    #     url_click_aux = item['url_click']
+    #
+    #     nombre_imagen_aux = str(obtiene_nombre_fichero(url_imagen_aux))
+    #
+    #     url_imagen_aux = obtiene_nombre_fichero(item['url_click'])
+    #     timestamp_creacion_aux = item['SentTimestamp']
+    #
+    #     s3_url_imagen = 's3://bitv-ads/' + str(nombre_imagen_aux) + ".img"
+    #     s3_url_qr = 's3://bitv-qrs/' + str(nombre_imagen_aux) + ".qr"
+    #
+    #     # Calculamos el short de Click
+    #     domain = '9h5q.short.gy'
+    #     url_click_short = obtiene_url_short(domain, url_click_aux)
+    #
+    #     table.put_item(
+    #         Item={
+    #             'nombre_imagen': nombre_imagen_aux,
+    #             'SentTimestamp': timestamp_creacion_aux,
+    #             'url_ad': url_imagen_aux,
+    #             'url_click': url_click_aux,
+    #             's3_url_imagen': s3_url_imagen,
+    #             's3_url_qr': s3_url_qr,
+    #             'url_click_short': url_click_short,
+    #         },
+    #     )
 
-        url_imagen_aux = obtiene_nombre_fichero(item['url_click'])
-        timestamp_creacion_aux = item['SentTimestamp']
-
-        s3_url_imagen = 's3://bitv-ads/' + str(nombre_imagen_aux) + ".img"
-        s3_url_qr = 's3://bitv-qrs/' + str(nombre_imagen_aux) + ".qr"
-
-        # Calculamos el short de Click
-        domain = '9h5q.short.gy'
-        url_click_short = obtiene_url_short(domain, url_click_aux)
-
-        table.put_item(
-            Item={
-                'nombre_imagen': nombre_imagen_aux,
-                'SentTimestamp': timestamp_creacion_aux,
-                'url_ad': url_imagen_aux,
-                'url_click': url_click_aux,
-                's3_url_imagen': s3_url_imagen,
-                's3_url_qr': s3_url_qr,
-                'url_click_short': url_click_short,
-            },
-        )
-
+    # TODO Aqui no tiene mucho sentido, solo tendremos un item por cada hilo...
     # Set the maximum number of concurrent workers
-    max_workers = 10
-
-    # Create a thread pool executor
-    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # Submit the bulk load tasks to the executor
-        futures = [executor.submit(process_item, item) for item in items]
-
-        # Wait for the tasks to complete
-        concurrent.futures.wait(futures)
-
-        # Retrieve the results (optional)
-        results = [future.result() for future in futures]
-
-    return results
+    # max_workers = 10
+    #
+    # # Create a thread pool executor
+    # with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+    #     # Submit the bulk load tasks to the executor
+    #     futures = [executor.submit(process_item, item) for item in items]
+    #
+    #     # Wait for the tasks to complete
+    #     concurrent.futures.wait(futures)
+    #
+    #     # Retrieve the results (optional)
+    #     results = [future.result() for future in futures]
+    #
+    # return results
 
 
 # Se adopta el criterio que el nombre del fichero a guardar en nuestro repositorio es el nombre del fichoro que sale

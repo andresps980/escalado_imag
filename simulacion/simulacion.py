@@ -37,12 +37,12 @@ if __name__ == '__main__':
     logger = configura_logs(args)
     print_cabecera()
 
-    lista_url_anuncios = read_text_file('D:\pruebas_repo_mostaza\escalado_imag\data\listado_url_anuncios.txt')
-    # lista_url_anuncios = read_text_file('D:\pruebas_repo_mostaza\escalado_imag\data\list2.txt')
+    # lista_url_anuncios = read_text_file('D:\pruebas_repo_mostaza\escalado_imag\data\listado_url_anuncios.txt')
+    lista_url_anuncios = read_text_file('D:\pruebas_repo_mostaza\escalado_imag\data\list2.txt')
     # lista_url_anuncios = read_text_file('D:\pruebas_repo_mostaza\escalado_imag\data\list3.txt')
     logger.info(f'Numero de filas leidas. {len(lista_url_anuncios)}')
 
-    session_aws, s3, dynamodb, sqs, queue_url = create_session(logger)
+    session_aws, sqs, queue_url = create_session(logger)
 
     # url = 'https://creatives.sascdn.com/diff/4270/advertiser/503079/300x600_UEM_CHICA_1MAYO.GIF_DFA_e8070fd6-765a' \
     #       '-4778-9c68-44de7fe070f6.gif '

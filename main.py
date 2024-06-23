@@ -21,7 +21,7 @@ if __name__ == '__main__':
     logger = configura_logs(args)
     print_cabecera()
 
-    session_aws, s3, dynamodb, sqs, queue_url = create_session(logger)
+    session_aws, sqs, queue_url = create_session(logger)
     if queue_url is None:
         exit(-1)
 
@@ -48,7 +48,7 @@ if __name__ == '__main__':
         # Create a thread pool executor
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix='process_images') as executor:
             # Apply process_images function to each batch of image paths asynchronously
-            results = [executor.submit(process_images, batch, logger) for batch in batches]
+            results = [executor.submit(process_images, batch, logger, session_aws) for batch in batches]
 
         # Print the total processing time
         logger.info(f"Tiempo de procesamiento: {(time.time() - start_time)} seconds")
