@@ -10,9 +10,6 @@ import random
 import colorthief
 from colorthief import ColorThief
 
-import cv2
-from cv2 import dnn_superres
-
 from botocore.exceptions import ClientError
 
 from utils.gestion_imagenes import load_image_from_url, \
@@ -288,17 +285,13 @@ def process_images(paths, logger, session_aws):
                 # reescarlarlas
                 # Volver a montar el GIF animado con los PNGs reescalados
 
-                # TODO Andres: Elegir donde inicializar lo siguiente
-                # TODO Seguramente tengamos que hacer la seleccion a CPU de test_cuda
-                sr = cv2.dnn_superres.DnnSuperResImpl_create()
-
                 if tipo_imagen == 'gif':
                     resized_gif_frames_files = []
 
                     for file in filenames_list:
                         imagen_aux = Image_pil.open(file)
                         static_image = imagen_aux.convert('RGB')
-                        resized_image = procedimiento_de_reescalado_imagen_por_ai(modelo, static_image, sr)
+                        resized_image = procedimiento_de_reescalado_imagen_por_ai(modelo, static_image)
                         resized_image_file = io.BytesIO()
                         resized_image.save(resized_image_file, format='PNG')
                         resized_image_file.seek(0)
@@ -316,7 +309,7 @@ def process_images(paths, logger, session_aws):
                     # TODO Que hacemos con los PNG?
                     # pass
                     # Aplicamos el proceso de reescalado de la imagen a la única que hay en la lista de frames.
-                    resized_image = procedimiento_de_reescalado_imagen_por_ai(modelo, imagen, sr)
+                    resized_image = procedimiento_de_reescalado_imagen_por_ai(modelo, imagen)
                     # Guardamos en disco
                     with resized_image as im:
                         # Guardamnos el png
@@ -328,7 +321,7 @@ def process_images(paths, logger, session_aws):
                     # TODO Que hacemos con los PNG?
                     # pass
                     # Aplicamos el proceso de reescalado de la imagen a la única que hay en la lista de frames.
-                    resized_image = procedimiento_de_reescalado_imagen_por_ai(modelo, imagen, sr)
+                    resized_image = procedimiento_de_reescalado_imagen_por_ai(modelo, imagen)
                     # Guardamos en disco
                     with resized_image as im:
                         nombre_fichero_a_guardar = os.path.join(temp_folder, "TONTO_" + nombre_fichero_imagen + '.jpeg')
@@ -391,7 +384,6 @@ def process_images(paths, logger, session_aws):
                     'url_click_short': 'TESTTTT',
                 }
 
-                # TODO Andres: De momento no subimos las imagenes hasta controlar la prueba...
                 bulk_load_items(item, table)
 
                 ########

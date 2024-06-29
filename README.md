@@ -11,7 +11,8 @@ git clone https://github.com/andresps980/escalado_imag.git
 * Instalacion de open cv
   * https://pypi.org/project/opencv-python/
   * Con cuda
-    * https://stackoverflow.com/questions/12910902/opencv-error-no-gpu-support-library-is-compiled-without-cuda-support
+    * Usando Google Colab: https://stackoverflow.com/questions/12910902/opencv-error-no-gpu-support-library-is-compiled-without-cuda-support
+    * Para pruebas locales: https://www.jamesbowley.co.uk/qmd/opencv_cuda_python_windows.html
 
 *  Instalacion OpenCV para python (opcion completa con GUI para pruebas, al final instalar la opcion sin GUI)
     * pip install opencv-contrib-python

@@ -1,10 +1,12 @@
-import cv2
 import urllib.request
 import numpy as np
 import imageio
 import string
 import random
 import os
+
+import cv2
+from cv2 import dnn_superres
 
 from io import BytesIO
 from PIL import ImageSequence
@@ -186,7 +188,12 @@ def async_inference(images):
 # TODO Andres Anotacion solo para notebooks
 #  https://www.tensorflow.org/api_docs/python/tf/function#used-in-the-notebooks
 # @tf.function
-def procedimiento_de_reescalado_imagen_por_ai(modelo_, imagen_, sr):
+def procedimiento_de_reescalado_imagen_por_ai(modelo_, imagen_):
+
+    # TODO Andres: Elegir donde inicializar lo siguiente
+    # TODO Seguramente tengamos que hacer la seleccion a CPU de test_cuda
+    sr = cv2.dnn_superres.DnnSuperResImpl_create()
+
     # with tf.device(device):
     # Obtenemos los parámetros que aplicar al modelo de reescalado
     parametros = calcula_modelo_reescaldo(modelo_)

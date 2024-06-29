@@ -9,11 +9,12 @@ import tensorflow as tf
 ### Read source image
 img_src = cv2.imread("D:\pruebas_repo_mostaza\escalado_imag\models\FSRCNN-small_x2.pb")
 
-### Run with GPU
-img_gpu_src = cv2.cuda_GpuMat()
-img_gpu_dst = cv2.cuda_GpuMat()
-for i in range(100):
-    img_gpu_src.upload(img_src)
+### Run with GPU: Esto peta por no tener soporte CUDA
+# (-216:No CUDA support) The library is compiled without CUDA support in function 'throw_no_cuda'
+# img_gpu_src = cv2.cuda_GpuMat()
+# img_gpu_dst = cv2.cuda_GpuMat()
+# for i in range(100):
+#     img_gpu_src.upload(img_src)
 
 print(cv.__version__)
 print(cv.cuda.getCudaEnabledDeviceCount())

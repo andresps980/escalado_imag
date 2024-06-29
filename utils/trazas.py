@@ -30,6 +30,8 @@ def configura_logs(args):
 
     logger_repos = logging.getLogger(__name__)
 
+    # TODO Posibilidad de añadir un handle por cada worker y facilitar la lectura de logs...
+    # TODO O reducir todo el log de un procesamiento a una linea... para tener solo un archivo y no complicarlo...
     # Create handlers
     c_handler = logging.StreamHandler()
     f_handler = logging.FileHandler(args.OutputDir + 'file.log', 'a')

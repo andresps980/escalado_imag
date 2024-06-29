@@ -37,8 +37,8 @@ if __name__ == '__main__':
     logger = configura_logs(args)
     print_cabecera()
 
-    # lista_url_anuncios = read_text_file('D:\pruebas_repo_mostaza\escalado_imag\data\listado_url_anuncios.txt')
-    lista_url_anuncios = read_text_file('D:\pruebas_repo_mostaza\escalado_imag\data\list2.txt')
+    lista_url_anuncios = read_text_file('D:\pruebas_repo_mostaza\escalado_imag\data\listado_url_anuncios.txt')
+    # lista_url_anuncios = read_text_file('D:\pruebas_repo_mostaza\escalado_imag\data\list2.txt')
     # lista_url_anuncios = read_text_file('D:\pruebas_repo_mostaza\escalado_imag\data\list3.txt')
     logger.info(f'Numero de filas leidas. {len(lista_url_anuncios)}')
 
