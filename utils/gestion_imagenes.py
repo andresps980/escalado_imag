@@ -49,11 +49,11 @@ def save_gif_frames(image, temp_folder):
 
             # TODO Andres se generan gifs de hasta 200 PNGs ?????
             # limitamos las rotaciones del Gif animado a 50
-            if len(filenames) > 20:
-                # filenames = filenames[0:50]
-                # durations = durations[0:50]
-                filenames = filenames
-                durations = durations
+            # if len(filenames) > 20:
+            #     # filenames = filenames[0:50]
+            #     # durations = durations[0:50]
+            #     filenames = filenames
+            #     durations = durations
 
     return filenames, durations
 
@@ -63,6 +63,10 @@ def load_image_from_url(url, temp_folder, logger):
     durations_list = []
 
     try:
+        # Define the characters you want to choose from
+        characters = string.ascii_letters
+        # Generate a random string of two characters
+        random_string = ''.join(random.choice(characters) for _ in range(2))
 
         with urllib.request.urlopen(url) as response:
             img_data = response.read()
@@ -73,16 +77,10 @@ def load_image_from_url(url, temp_folder, logger):
         tipo_imagen = imagen.format.lower()
 
         # Si la imagen en GIF , la desconompemos en lista de PNGs y tiempos de transición
-        if 'gif' in imagen.format.lower():
+        if 'gif' in tipo_imagen:
             filenames_list, durations_list = save_gif_frames(imagen, temp_folder)
 
-        else:  # para el resto del tipo de imágenes
-
-            # Define the characters you want to choose from
-            characters = string.ascii_letters
-            # Generate a random string of two characters
-            random_string = ''.join(random.choice(characters) for _ in range(2))
-
+        elif 'jpeg' in tipo_imagen:  # para el resto del tipo de imágenes
             # generamos un nombre de fichero aleatorio
             filename = os.path.join(temp_folder, "imagen_temp_ " + random_string + ".jpeg")
 
@@ -91,6 +89,22 @@ def load_image_from_url(url, temp_folder, logger):
 
             # Save the current frame as a png file
             imagen.save(filename, format='JPEG')
+
+        elif tipo_imagen == 'png':
+            # generamos un nombre de fichero aleatorio
+            filename = os.path.join(temp_folder, "imagen_temp_ " + random_string + ".png")
+
+            # Añadimos el nombre a
+            filenames_list = [filename]
+
+            # Save the current frame as a png file
+            imagen.save(filename, format='PNG')
+        else:
+            imagen = None
+            filenames_list = []
+            durations_list = []
+            tipo_imagen = ""
+            logger.error(f"Error tipo imagen no conocido: {tipo_imagen}")
 
     except Exception as e:
         logger.error(f"Exception cargando imagen desde URL: {url}, message: ", exc_info=True)

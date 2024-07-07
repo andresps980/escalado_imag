@@ -52,6 +52,6 @@ def adjust_qr_to_target_size(qr_file, target_size, temp_folder, logger):
 
     # Save the resized QR code to file
     # resized_qr_file = os.path.splitext(qr_file)[0] + '_resized.png'
-    resized_qr_image.save(nombre_fichero_qr_temp)
+    resized_qr_image.save(nombre_fichero_qr_temp, format='PNG')
 
     return nombre_fichero_qr_temp

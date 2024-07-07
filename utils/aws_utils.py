@@ -9,6 +9,8 @@ import string
 import random
 import colorthief
 from colorthief import ColorThief
+import base64
+import itertools
 
 from botocore.exceptions import ClientError
 
@@ -220,14 +222,14 @@ def process_images(paths, logger, session_aws):
 
         # Descargamos la imagen desde el CDN del anunciante y calculamos algunos datos de ella
         tipo_imagen, imagen, filenames_list, durations_list = load_image_from_url(url_imagen, temp_folder, logger)
-
+ 
         if imagen is not None:
             try:
                 # Obtenemos el nombre de fichero de imagen y qr
-                nombre_fichero_imagen = obtiene_nombre_fichero(url_imagen)
+                nombre_fichero_imagen, nombre_fichero_base64 = obtiene_nombre_fichero(url_imagen, logger)
                 # TODO Andres, mejor dejar la terminacion como el tipo?
-                nombre_fichero_imagen_a_guardar = nombre_fichero_imagen + '.img'
-                nombre_fichero_qr_a_guardar = nombre_fichero_imagen + '.qr'
+                nombre_fichero_imagen_a_guardar = nombre_fichero_base64 + '.img'
+                nombre_fichero_qr_a_guardar = nombre_fichero_base64 + '.qr'
 
                 # Hacemos un preprocesado de los QRs:  las dimensiones y color adecuado a la imagen Obtenemos el
                 # valor de la nuevas dimensiones reescaladas para formato TV de la primera imagen de la lista También
@@ -267,15 +269,6 @@ def process_images(paths, logger, session_aws):
                                                                              temp_folder,
                                                                              logger)
 
-                # Abrimos la imagen del QR reescalado desde disco
-                qr_image_reescalado = Image_pil.open(nombre_fichero_qr_temp_reescalado)
-
-                # Guardamos el QR final con color y reescalado
-                nombre_fichero_qr_a_guardar = os.path.join(temp_folder, nombre_fichero_qr_a_guardar)
-                qr_image_reescalado.save(nombre_fichero_qr_a_guardar, format='PNG')
-
-                # Tenemos que comprobar el tipo de imagen que hemos obtenido
-                tipo_imagen = identify_filetype(imagen)
                 logger.info(f'Nombre fichero imagen img: {nombre_fichero_imagen_a_guardar}')
                 logger.info(f'Nombre fichero imagen qr: {nombre_fichero_qr_a_guardar}')
                 logger.info(f'Tipo de imagen obtenida: {tipo_imagen}')
@@ -284,6 +277,10 @@ def process_images(paths, logger, session_aws):
                 # Recorvertir una a uno cada frame a tipo admisible por CV2
                 # reescarlarlas
                 # Volver a montar el GIF animado con los PNGs reescalados
+                if len(nombre_fichero_base64) > 100:
+                    nombre_normalizado = ''.join(itertools.islice(nombre_fichero_base64, 100))
+                else:
+                    nombre_normalizado = nombre_fichero_base64
 
                 if tipo_imagen == 'gif':
                     resized_gif_frames_files = []
@@ -299,32 +296,26 @@ def process_images(paths, logger, session_aws):
 
                     logger.info(f'Total de resized_gif_frames_files: {len(resized_gif_frames_files)}')
 
-                    nombre_fichero_a_guardar = os.path.join(temp_folder, "TONTO_" + nombre_fichero_imagen + '.gif')
+                    nombre_fichero_a_guardar = os.path.join(temp_folder, "FINAL_" + nombre_normalizado + '.gif')
                     logger.info(f'Nombre fichero a guardar: {nombre_fichero_a_guardar}')
 
                     make_gif(resized_gif_frames_files, durations_list, nombre_fichero_a_guardar, 1)
                     logger.info(f'Numero frames imagen final gif: {get_total_frames(nombre_fichero_a_guardar)}')
 
                 elif tipo_imagen == 'png':
-                    # TODO Que hacemos con los PNG?
-                    # pass
-                    # Aplicamos el proceso de reescalado de la imagen a la única que hay en la lista de frames.
                     resized_image = procedimiento_de_reescalado_imagen_por_ai(modelo, imagen)
                     # Guardamos en disco
                     with resized_image as im:
                         # Guardamnos el png
-                        nombre_fichero_a_guardar = os.path.join(temp_folder, "TONTO_" + nombre_fichero_imagen + '.png')
+                        nombre_fichero_a_guardar = os.path.join(temp_folder, "FINAL_" + nombre_normalizado + '.png')
                         im.save(nombre_fichero_a_guardar, format='PNG')
                     logger.info(f'Nombre fichero a guardar: {nombre_fichero_a_guardar}')
 
                 elif tipo_imagen == 'jpeg':
-                    # TODO Que hacemos con los PNG?
-                    # pass
-                    # Aplicamos el proceso de reescalado de la imagen a la única que hay en la lista de frames.
                     resized_image = procedimiento_de_reescalado_imagen_por_ai(modelo, imagen)
                     # Guardamos en disco
                     with resized_image as im:
-                        nombre_fichero_a_guardar = os.path.join(temp_folder, "TONTO_" + nombre_fichero_imagen + '.jpeg')
+                        nombre_fichero_a_guardar = os.path.join(temp_folder, "FINAL_" + nombre_normalizado + '.jpeg')
                         # Guardamnos el png
                         im.save(nombre_fichero_a_guardar, format='JPEG')
                     logger.info(f'Nombre fichero a guardar: {nombre_fichero_a_guardar}')
@@ -341,39 +332,22 @@ def process_images(paths, logger, session_aws):
                 # Ya tenemos la imagen redimensionada tanto si es un GIF como no
                 # También tenemos la imagen del QR generado
 
+                # TODO Investigar la idea de usar solo imgen en memoria
+                # TODO Hacemos algo con la respuesta?
                 # write resized image + qr image  to S3 buckets
-                # s3.put_object(Bucket='mostaza_ads', Key=nombre_fichero_imagen+'.img', Body=resized_image.tobytes())
-                # s3.put_object(Bucket='mostaza_qrs_ads', Key=nombre_fichero_imagen+'.qr', Body=qr_image.tobytes())
-                s3.put_object(Bucket=bucket_name_imagenes, Key=nombre_fichero_imagen + '.img',
-                              Body=resized_image.tobytes())
-                # TODO Este no parece el reescalado qr
-                s3.put_object(Bucket=bucket_name_qrs, Key=nombre_fichero_imagen + '.qr', Body=qr_image.tobytes())
-
-                # Ahora vamos a guardar los valores en un diccionario transitorio que luego subiremos en bulk a Dynamo
-                # Añadimos valores al diccionario
-
-                # Rellenamos los datos a guardar luego en S3
-
-                '''
-                  #Añadimos los ficheros de salida
-                  lista_ficheros_imagenes_reescaladas = lista_ficheros_imagenes_reescaladas.append(nombre_fichero_imagen+'.img')
-                  lista_ficheros_qrs                  = lista_ficheros_qrs.append(nombre_fichero_imagen+'.qr')
-                  lista_nombres_ficheros_imagenes_reescaladas = lista_nombres_ficheros_imagenes_reescaladas.append(nombre_fichero_imagen+'.img')
-                  lista_nombres_ficheros_qrs          = lista_nombres_ficheros_qrs.append(nombre_fichero_imagen+'.qr')
-                  '''
+                # s3.put_object(Bucket=bucket_name_imagenes, Key=nombre_fichero_imagen + '.img',
+                #               Body=resized_image.tobytes())
+                response = s3.upload_file(nombre_fichero_a_guardar,
+                                          bucket_name_imagenes,
+                                          nombre_fichero_imagen_a_guardar)
+                logger.info(f'Respuesta s3 al guardar imagen: {response}')
+                # s3.put_object(Bucket=bucket_name_qrs, Key=nombre_fichero_imagen + '.qr', Body=qr_image.tobytes())
+                response = s3.upload_file(nombre_fichero_qr_temp_reescalado,
+                                          bucket_name_qrs,
+                                          nombre_fichero_qr_a_guardar)
+                logger.info(f'Respuesta s3 al guardar qr: {response}')
 
                 # Subo los resultados a Dynamo
-
-                # item = {
-                #     'nombre_imagen': str(nombre_fichero_imagen),
-                #     'SentTimestamp': timestamp_creacion,
-                #     'url_ad': url_imagen,
-                #     'url_click': url_click,
-                #     's3_url_imagen': nombre_fichero_imagenes_a_guardar_s3,
-                #     's3_url_qr': nombre_fichero_qr_a_guardar_s3,
-                #     'url_click_short': url_click_short,
-                # }
-
                 item = {
                     'nombre_imagen': str(nombre_fichero_imagen),
                     'SentTimestamp': timestamp_creacion,
@@ -385,52 +359,6 @@ def process_images(paths, logger, session_aws):
                 }
 
                 bulk_load_items(item, table)
-
-                ########
-
-                # TODO Esta parte parece que ya esta hecha arriba...
-                # Procedemos a la subida a S3 de los ficheos de imagen
-
-                '''
-                  print ("\n---'s3://mostaza_ads/'+nombre_fichero_imagenes_a_guardar_s3---")
-                  print (nombre_fichero_imagenes_a_guardar_s3)
-
-
-                  print ("-------s3://mostaza_qrs_ads/'+nombre_fichero_qr_a_guardar_s3------")
-                  print (nombre_fichero_qr_a_guardar_s3)
-
-
-                  print ("-----nombre_fichero_a_guardar -----")
-                  print (nombre_fichero_a_guardar)
-
-                  print ("-----nombre_fichero_qr_a_guardar-----")
-                  print (nombre_fichero_qr_a_guardar)
-                  '''
-
-                '''
-                  #########
-
-                  #Sumimos imagen reescalada a S3
-
-                  nombre_fichero_a_subir = nombre_fichero_a_guardar
-                  nombre_fichero_salida = nombre_fichero_a_guardar
-
-                  BUCKET_imagenes = 'bitv-ads'
-
-                  upload_file( nombre_fichero_a_subir , BUCKET_imagenes , object_name = nombre_fichero_salida )
-
-                  #########
-
-
-                  #Subimos qr reescalado a S3
-
-                  nombre_fichero_a_subir = nombre_fichero_qr_a_guardar
-                  nombre_fichero_salida = nombre_fichero_qr_a_guardar
-
-                  BUCKET_qr = 'bitv-qrs'
-
-                  upload_file( nombre_fichero_a_subir , BUCKET_qr , object_name = nombre_fichero_salida )
-                  '''
 
                 # TODO Andres de momento no borramos para ver resultados
                 # # Quitamos los fichero empleados.
@@ -482,6 +410,35 @@ def dame_tabla_dinamodb(logger, session_aws):
         logger.error(f"Exception general creando la tabla: {TABLE_NAME}, mensaje: ", exc_info=True)
         table = None
     return table
+
+
+def truncateTable(table):
+    # get the table keys
+    table_key_names = [key.get("AttributeName") for key in table.key_schema]
+
+    """
+    NOTE: there are reserved attributes for key names, please see https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/ReservedWords.html
+    if a hash or range key is in the reserved word list, you will need to use the ExpressionAttributeNames parameter
+    described at https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/dynamodb.html#DynamoDB.Table.scan
+    """
+
+    # Only retrieve the keys for each item in the table (minimize data transfer)
+    projection_expression = ", ".join(table_key_names)
+
+    response = table.scan(ProjectionExpression=projection_expression)
+    data = response.get('Items')
+
+    while 'LastEvaluatedKey' in response:
+        response = table.scan(
+            ProjectionExpression=projection_expression,
+            ExclusiveStartKey=response['LastEvaluatedKey'])
+        data.extend(response['Items'])
+
+    with table.batch_writer() as batch:
+        for each in data:
+            batch.delete_item(
+                Key={key: each[key] for key in table_key_names}
+            )
 
 
 def extraer_info_imagen(filenames_list, imagen, logger, tipo_imagen):
@@ -585,7 +542,7 @@ def bulk_load_items(item, table):
 # Se adopta el criterio que el nombre del fichero a guardar en nuestro repositorio es el nombre del fichoro que sale
 # en la URL quitando el el sufijo final. Este será el indice de la base de datos para luego buscar si de ese anuncio
 # ya tenemos escalado en tamaño ese anuncio o no y también sera el nombre de la imagen (***.qr) del QR generado.
-def obtiene_nombre_fichero(url_anuncio):
+def obtiene_nombre_fichero(url_anuncio, logger):
     # Quitamos todos los campos de la URL salvo el ultimo después de la última "/"
     try:
         nombre_fichero_partido = url_anuncio.split('/')
@@ -595,10 +552,20 @@ def obtiene_nombre_fichero(url_anuncio):
         nombre_fichero = nombre_fichero.split('.')
         nombre_fichero = nombre_fichero[0]
 
-    except:
-        nombre_fichero = ""
+        # Normalizamos los nombres para evitar caracteres no deseados
+        byte_data = nombre_fichero.encode('utf-8')
+        encoded_data = base64.urlsafe_b64encode(byte_data)
+        nombre_fichero_base64 = encoded_data.decode(encoding="utf-8")
+        # Este proceso seria reversible de la siguiente forma:
+        # original = base64.urlsafe_b64decode(encoded_data)
+        # nombre_original = original.decode(encoding="utf-8")
 
-    return nombre_fichero
+    except Exception as e:
+        logger.error("Exception obteniendo el nombre base64, mensaje: ", exc_info=True)
+        nombre_fichero = ""
+        nombre_fichero_base64 = ""
+
+    return nombre_fichero, nombre_fichero_base64
 
 
 # Elimina ficheros en paralelo

@@ -1,18 +1,17 @@
 from utils.trazas import configura_logs, argumentos_validos
-from utils.aws_utils import create_session, send_message_sqs
+from utils.aws_utils import create_session, send_message_sqs, dame_tabla_dinamodb, truncateTable
 
 
-# Obtenemos el total de URLs de anuncios reales captados desde periódicos
-# listado_url_anuncios.txt
-# Este fichero es un listado manual urls de anuncios tipo JPEG, GIF, Gif animado, BMP captado a mano desde webs de periódicos.
-# Hoy por hoy no es posible tratar anuncios tipo HTML complejos.
+# Obtenemos el total de URLs de anuncios reales captados desde periódicos listado_url_anuncios.txt Este fichero es un
+# listado manual urls de anuncios tipo JPEG, GIF, Gif animado, BMP captado a mano desde webs de periódicos. Hoy por
+# hoy no es posible tratar anuncios tipo HTML complejos.
 def read_text_file(file_path):
     # Open the file and read its contents
     with open(file_path, 'r') as f:
         file_contents = f.read()
 
-    # Clean the file contents by removing any extraneous characters
-    # cleaned_contents = re.sub(r'[^a-zA-Z0-9\s\.\-\_\+\!\@\#\$\%\^\&\*\(\)\[\]\{\}\;\:\'\"\<\>\,\.\?\`\\\/]+', '', file_contents)
+    # Clean the file contents by removing any extraneous characters cleaned_contents = re.sub(r'[
+    # ^a-zA-Z0-9\s\.\-\_\+\!\@\#\$\%\^\&\*\(\)\[\]\{\}\;\:\'\"\<\>\,\.\?\`\\\/]+', '', file_contents)
     cleaned_contents = file_contents
 
     # Split the cleaned contents into a list of text strings
@@ -37,12 +36,18 @@ if __name__ == '__main__':
     logger = configura_logs(args)
     print_cabecera()
 
+    # lista_url_anuncios = read_text_file('D:\pruebas_repo_mostaza\escalado_imag\data\listado_imagenes_errores.txt')
     lista_url_anuncios = read_text_file('D:\pruebas_repo_mostaza\escalado_imag\data\listado_url_anuncios.txt')
     # lista_url_anuncios = read_text_file('D:\pruebas_repo_mostaza\escalado_imag\data\list2.txt')
     # lista_url_anuncios = read_text_file('D:\pruebas_repo_mostaza\escalado_imag\data\list3.txt')
     logger.info(f'Numero de filas leidas. {len(lista_url_anuncios)}')
 
     session_aws, sqs, queue_url = create_session(logger)
+
+    #TODO Hacer esto por argumento...
+    # Pruebas truncado de la tabla dinamoDB usada
+    table = dame_tabla_dinamodb(logger, session_aws)
+    truncateTable(table)
 
     # url = 'https://creatives.sascdn.com/diff/4270/advertiser/503079/300x600_UEM_CHICA_1MAYO.GIF_DFA_e8070fd6-765a' \
     #       '-4778-9c68-44de7fe070f6.gif '
@@ -66,6 +71,9 @@ if __name__ == '__main__':
 
     cont = 1
     for url_demo in lista_url_anuncios:
+        # Aceptamos comentarios en el archivo
+        if len(url_demo) <= 0 or url_demo[0] == "#":
+            continue
         logger.info(f'Mandando mensaje {cont}, url: {url_demo}')
         cont += 1
         send_message_sqs(sqs, url_demo, url_click, queue_url)
