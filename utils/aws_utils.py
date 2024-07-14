@@ -177,18 +177,6 @@ def crear_tabla_dinamodb(session_aws):
 
 
 def process_images(paths, logger, session_aws):
-    # TODO Cual era el objetivo?
-    # DEfinimos un dict de los resultados
-    dict_resultados = {}
-
-    # List of keys
-    keyList = ["nombre_imagen", "timestamp_creacion", "s3_imagen", 's3_qr', 'url_imagen', 'url_click',
-               'url_click_short']
-
-    # iterating through the elements of list
-    for i in keyList:
-        dict_resultados[i] = None
-
     table = dame_tabla_dinamodb(logger, session_aws)
     if table is None:
         logger.error(f'Salimos del proceso, {len(paths)} imagenes no seran procesadas')
@@ -200,13 +188,6 @@ def process_images(paths, logger, session_aws):
 
         logger.info('--------------- Comienzo procesamiento ---------------')
 
-        # TODO Andres: Para pruebas de imagen voy a guardar de momento en un dir por escalado
-        characters = string.ascii_letters
-        result_str = ''.join(random.choice(characters) for _ in range(5))
-        path_base = '.'
-        temp_folder = os.path.join(path_base, "img", 'imagenes_temp_' + result_str)
-        os.mkdir(temp_folder)
-
         # Tenemos una entrada de un json con la URL de la imagen y la url de click.
         # Tenemos que obtener URL de ambas.
         # path es un DICT
@@ -214,14 +195,27 @@ def process_images(paths, logger, session_aws):
         url_click = path['url_click']
         timestamp_creacion = path['SentTimestamp']
 
+        # Obtenemos el nombre de fichero de imagen y qr
+        nombre_fichero_imagen, nombre_fichero_base64 = obtiene_nombre_fichero(url_imagen, logger)
+        # TODO Se esta procesando o se ha procesado ya?
+        procesar = existe(table, nombre_fichero_imagen)
+        if procesar is False:
+            logger.info(f'URL ya procesada: {nombre_fichero_imagen}')
+            continue
+
+        # TODO Andres: Para pruebas de imagen voy a guardar de momento en un dir por escalado
+        characters = string.ascii_letters
+        result_str = ''.join(random.choice(characters) for _ in range(5))
+        path_base = '.'
+        temp_folder = os.path.join(path_base, "img", 'imagenes_temp_' + result_str)
+        os.mkdir(temp_folder)
+
         # Descargamos la imagen desde el CDN del anunciante y calculamos algunos datos de ella
         tipo_imagen, imagen, filenames_list, durations_list = load_image_from_url(url_imagen, temp_folder, logger)
 
         if imagen is not None:
             try:
-                # Obtenemos el nombre de fichero de imagen y qr
-                nombre_fichero_imagen, nombre_fichero_base64 = obtiene_nombre_fichero(url_imagen, logger)
-                # TODO Andres, mejor dejar la terminacion como el tipo?
+                # Asignacion nombres de archivos.
                 nombre_fichero_imagen_a_guardar = nombre_fichero_base64 + '.' + tipo_imagen
                 nombre_fichero_qr_a_guardar = nombre_fichero_base64 + '.qr'
 
@@ -630,3 +624,13 @@ def get_files_on_s3_resource(session_aws, logger):
     logger.info(f'Elementos en el bucket {BUCKET_ADS}: {len(files_on_s3_ads)}')
     logger.info(f'Elementos en el bucket {BUCKET_QRS}: {len(files_on_s3_qrs)}')
     return
+
+
+def existe(table, key):
+    response = table.get_item(
+        Key={
+            'nombre_imagen': key
+        }
+    )
+    data = response.get('Item')
+    return data is None

@@ -1,12 +1,15 @@
 # CONVERSION IMAGENES: KeyError: 'RGBA'
-https://s0.2mdn.net/simgad/9419291613328598043
+# https://s0.2mdn.net/simgad/9419291613328598043
 # CONVERSION IMAGENES: KeyError: 'P'
-https://tpc.googlesyndication.com/simgad/9222575622703902343?sqp=4sqPyQQ7QjkqNxABHQAAtEIgASgBMAk4A0DwkwlYAWBfcAKAAQGIAQGdAQAAgD-oAQGwAYCt4gS4AV_FAS2ynT4&rs=AOga4qnPOP6VD3I4LNS6kPmbeszr_Luajg
+# https://tpc.googlesyndication.com/simgad/9222575622703902343?sqp=4sqPyQQ7QjkqNxABHQAAtEIgASgBMAk4A0DwkwlYAWBfcAKAAQGIAQGdAQAAgD-oAQGwAYCt4gS4AV_FAS2ynT4&rs=AOga4qnPOP6VD3I4LNS6kPmbeszr_Luajg
 
 # ERRORES POR NOMBRE DE ARCHIVO: OSError: [Errno 22] Invalid argument:
-https://tpc.googlesyndication.com/simgad/1833777933495607303?alt=
-https://tpc.googlesyndication.com/simgad/11602253850381544573?alt=
+# https://tpc.googlesyndication.com/simgad/1833777933495607303?alt=
+# https://tpc.googlesyndication.com/simgad/11602253850381544573?alt=
 
 
 # OTRO TIPO DE ERRORES: TypeError: unsupported operand type(s) for /: 'list' and 'int'
 https://tpc.googlesyndication.com/simgad/9782348189681870060
+
+# Ejemplo de gif de 208 imagenes
+https://s0.2mdn.net/simgad/8070233611741935041

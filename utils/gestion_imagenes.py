@@ -287,10 +287,12 @@ def make_gif(filenames_, durations_, gif_path_, loop_):
     # durations = durations_
 
     # Convert durations from milliseconds to seconds
-    durations = [duration / 1000 for duration in durations_]
-
-    # Save the animated GIF
-    imageio.mimsave(gif_path_, images, duration=durations, loop=loop_)
+    if len(durations_) > 1:
+        durations = [duration / 1000 for duration in durations_]
+        # Save the animated GIF
+        imageio.mimsave(gif_path_, images, duration=durations, loop=loop_)
+    else:
+        imageio.mimsave(gif_path_, images, duration=5, loop=loop_)
 
     # Clean up memory by deleting image objects
     del images
