@@ -47,21 +47,15 @@ TABLE_NAME = 'bitv_ads_transform'
 BUCKET_QRS = 'bitv-qrs'
 BUCKET_ADS = 'bitv-ads'
 
+# Cola de recepcion de peticiones de escalado
+QUEUE_NAME = 'bitv_ad_transform'
+
 
 def create_session(logger):
     session_aws = boto3.Session(
         aws_access_key_id=MYKEY,
         aws_secret_access_key=MYSECRET,
         region_name=AWS_REGION)
-
-    # TODO Haremos que cada worker tenga su propia sesion para dinamo y s3
-    # CREACION PARA S3
-    # s3 = session_aws.client('s3')
-    # Create a DynamoDB client using the session
-    # dynamodb = session_aws.client('dynamodb')
-
-    # CREACION PARA SQS
-    queue_name = 'bitv_ad_transform'
 
     # Initialize the SQS client using the existing session
     sqs = session_aws.client('sqs')
@@ -71,19 +65,19 @@ def create_session(logger):
     # queue
     queue_url = None
     try:
-        response = sqs.get_queue_url(QueueName=queue_name)
-        logger.info(f"The queue '{queue_name}' exists and its URL is: {response['QueueUrl']}")
+        response = sqs.get_queue_url(QueueName=QUEUE_NAME)
+        logger.info(f"The queue '{QUEUE_NAME}' exists and its URL is: {response['QueueUrl']}")
         queue_url = response['QueueUrl']
 
     except sqs.exceptions.QueueDoesNotExist:
-        logger.info(f"The queue '{queue_name}' does not exist.")
+        logger.info(f"The queue '{QUEUE_NAME}' does not exist.")
 
         # Create an SQS queue using the existing session
         sqs = session_aws.resource('sqs')
-        queue = sqs.create_queue(QueueName=queue_name)
+        queue = sqs.create_queue(QueueName=QUEUE_NAME)
         queue_url = queue.url
 
-        logger.info(f"Created a new queue '{queue_name}' with URL: {queue_url}")
+        logger.info(f"Created a new queue '{QUEUE_NAME}' with URL: {queue_url}")
 
     except ClientError as e:
         logger.error("Exception ClientError aws, creando acceso a colas", exc_info=True)
@@ -222,13 +216,13 @@ def process_images(paths, logger, session_aws):
 
         # Descargamos la imagen desde el CDN del anunciante y calculamos algunos datos de ella
         tipo_imagen, imagen, filenames_list, durations_list = load_image_from_url(url_imagen, temp_folder, logger)
- 
+
         if imagen is not None:
             try:
                 # Obtenemos el nombre de fichero de imagen y qr
                 nombre_fichero_imagen, nombre_fichero_base64 = obtiene_nombre_fichero(url_imagen, logger)
                 # TODO Andres, mejor dejar la terminacion como el tipo?
-                nombre_fichero_imagen_a_guardar = nombre_fichero_base64 + '.img'
+                nombre_fichero_imagen_a_guardar = nombre_fichero_base64 + '.' + tipo_imagen
                 nombre_fichero_qr_a_guardar = nombre_fichero_base64 + '.qr'
 
                 # Hacemos un preprocesado de los QRs:  las dimensiones y color adecuado a la imagen Obtenemos el
@@ -320,7 +314,6 @@ def process_images(paths, logger, session_aws):
                         im.save(nombre_fichero_a_guardar, format='JPEG')
                     logger.info(f'Nombre fichero a guardar: {nombre_fichero_a_guardar}')
 
-                # TODO Revisar la gestion de nombres, estamos cogiendo realmente el reescalado?
                 bucket_name_imagenes = BUCKET_ADS
                 bucket_name_qrs = BUCKET_QRS
                 bucket_s3_imagenes = "s3://" + bucket_name_imagenes
@@ -439,6 +432,38 @@ def truncateTable(table):
             batch.delete_item(
                 Key={key: each[key] for key in table_key_names}
             )
+
+
+def tabla_info(logger):
+    table = None
+    try:
+        # Abrimos session para dinamo
+        dynamodb = boto3.resource(
+            'dynamodb',
+            aws_access_key_id=MYKEY,
+            aws_secret_access_key=MYSECRET,
+            region_name=AWS_REGION
+        )
+        table = dynamodb.Table(TABLE_NAME)
+        logger.info(f'Item count: {table.item_count}')
+
+        dynamodb_client = boto3.client('dynamodb',
+                                       aws_access_key_id=MYKEY,
+                                       aws_secret_access_key=MYSECRET,
+                                       region_name=AWS_REGION)
+        table_descr = dynamodb_client.describe_table(
+            TableName=TABLE_NAME
+        )
+
+        logger.info(f'Tabla decrip: {table_descr}')
+        count = table_descr['Table']['ItemCount']
+        logger.info(f'Tabla decrip Item count: {count}')
+
+
+    except Exception as e:
+        logger.error(f"Exception general accdediendo a la tabla: {TABLE_NAME}, mensaje: ", exc_info=True)
+        table = None
+    return table
 
 
 def extraer_info_imagen(filenames_list, imagen, logger, tipo_imagen):
@@ -579,3 +604,29 @@ def remove_files_with_string(directory, string):
         for filename in filenames:
             if string in filename:
                 executor.submit(remove_file, filename)
+
+
+def get_files_on_s3_resource(session_aws, logger):
+    folder_path = '.'
+    s3 = boto3.resource('s3',
+                        aws_access_key_id=MYKEY,
+                        aws_secret_access_key=MYSECRET,
+                        region_name=AWS_REGION
+                        )
+    bucket = s3.Bucket(BUCKET_ADS)
+    # folder_objects = list(bucket.objects.filter(Prefix=folder_path))
+    folder_objects = bucket.objects.all()
+    files_on_s3_ads = []
+    for file in folder_objects:
+        files_on_s3_ads.append(file.key)
+
+    bucket = s3.Bucket(BUCKET_QRS)
+    # folder_objects = list(bucket.objects.filter(Prefix=folder_path))
+    folder_objects = bucket.objects.all()
+    files_on_s3_qrs = []
+    for file in folder_objects:
+        files_on_s3_qrs.append(file.key)
+
+    logger.info(f'Elementos en el bucket {BUCKET_ADS}: {len(files_on_s3_ads)}')
+    logger.info(f'Elementos en el bucket {BUCKET_QRS}: {len(files_on_s3_qrs)}')
+    return
