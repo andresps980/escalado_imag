@@ -9,6 +9,7 @@ table = dynamodb.Table('UrlShortener')
 
 def generate_short_url():
     """Generate a random short URL string."""
+    # 62 ^6 = 56.800.235.584
     chars = string.ascii_letters + string.digits
     return ''.join(random.choice(chars) for _ in range(6))
 

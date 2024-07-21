@@ -35,6 +35,7 @@ MYSECRET = 'xxxxxx'
 
 # CREACION PARA DYNAMO_DB
 TABLE_NAME = 'bitv_ads_transform'
+TABLE_NAME_URL = 'UrlShortener'
 
 # Buckets de S3 a emplear
 BUCKET_QRS = 'bitv-qrs'
@@ -196,18 +197,18 @@ def process_images(paths, logger, session_aws):
             logger.info(f'URL ya procesada: {nombre_fichero_imagen}')
             continue
 
-        # TODO Andres: Para pruebas de imagen voy a guardar de momento en un dir por escalado
-        characters = string.ascii_letters
-        result_str = ''.join(random.choice(characters) for _ in range(5))
-        path_base = '.'
-        temp_folder = os.path.join(path_base, "img", 'imagenes_temp_' + result_str)
-        os.mkdir(temp_folder)
-
         # Descargamos la imagen desde el CDN del anunciante y calculamos algunos datos de ella
         tipo_imagen, imagen, filenames_list, durations_list = load_image_from_url(url_imagen, temp_folder, logger)
 
         if imagen is not None:
             try:
+                # TODO Andres: Para pruebas de imagen voy a guardar de momento en un dir por escalado
+                characters = string.ascii_letters
+                result_str = ''.join(random.choice(characters) for _ in range(5))
+                path_base = '.'
+                temp_folder = os.path.join(path_base, "img", 'imagenes_temp_' + result_str)
+                os.mkdir(temp_folder)
+
                 # Asignacion nombres de archivos.
                 nombre_fichero_imagen_a_guardar = nombre_fichero_base64 + '.' + tipo_imagen
                 nombre_fichero_qr_a_guardar = nombre_fichero_base64 + '.qr'
@@ -421,8 +422,10 @@ def tabla_info(logger):
             aws_secret_access_key=MYSECRET,
             region_name=AWS_REGION
         )
+
+        # Informacion de la tabla relacional Id-ad <-> ImagenReescalada
         table = dynamodb.Table(TABLE_NAME)
-        logger.info(f'Item count: {table.item_count}')
+        logger.info(f'table Item count: {table.item_count}')
 
         dynamodb_client = boto3.client('dynamodb',
                                        aws_access_key_id=MYKEY,
@@ -435,6 +438,18 @@ def tabla_info(logger):
         logger.info(f'Tabla decrip: {table_descr}')
         count = table_descr['Table']['ItemCount']
         logger.info(f'Tabla decrip Item count: {count}')
+
+        # Informacion de la tabla de URL reducidas
+        table_url = dynamodb.Table(TABLE_NAME_URL)
+        logger.info(f'table_url Item count: {table_url.item_count}')
+
+        table_descr = dynamodb_client.describe_table(
+            TableName=TABLE_NAME_URL
+        )
+
+        logger.info(f'Tabla url decrip: {table_descr}')
+        count = table_descr['Table']['ItemCount']
+        logger.info(f'Tabla url decrip Item count: {count}')
 
 
     except Exception as e:
