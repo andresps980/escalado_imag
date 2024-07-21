@@ -49,8 +49,8 @@ if __name__ == '__main__':
         get_files_on_s3_resource(session_aws, logger)
 
     if args.enviar_urls:
-        # lista_url_anuncios = read_text_file('D:\pruebas_repo_mostaza\escalado_imag\data\listado_imagenes_errores.txt')
-        lista_url_anuncios = read_text_file('D:\pruebas_repo_mostaza\escalado_imag\data\listado_url_anuncios.txt')
+        lista_url_anuncios = read_text_file('D:\pruebas_repo_mostaza\escalado_imag\data\listado_imagenes_errores.txt')
+        # lista_url_anuncios = read_text_file('D:\pruebas_repo_mostaza\escalado_imag\data\listado_url_anuncios.txt')
         # lista_url_anuncios = read_text_file('D:\pruebas_repo_mostaza\escalado_imag\data\list2.txt')
         # lista_url_anuncios = read_text_file('D:\pruebas_repo_mostaza\escalado_imag\data\list3.txt')
         logger.info(f'Numero de filas leidas. {len(lista_url_anuncios)}')
@@ -82,4 +82,5 @@ if __name__ == '__main__':
                 continue
             logger.info(f'Mandando mensaje {cont}, url: {url_demo}')
             cont += 1
-            send_message_sqs(sqs, url_demo, url_click, queue_url)
+            # TODO url_click es cortado el API para la creacion de shorts... Investigar
+            send_message_sqs(sqs, url_demo, url_demo, queue_url)

@@ -27,15 +27,8 @@ from utils.qr_utils import make_qr, \
 
 from PIL import Image as Image_pil
 
-# TODO Andres
-# https://pywombat.com/articles/ipython-comandos-magicos
-# from IPython.display import Image as Image_Ipython
-# from IPython.display import Image, display
-# from IPython.display import Image as DisplayImage
-
 
 # Creamos una sesion de AWS accedemos API de AWS
-
 AWS_REGION = 'eu-west-1'
 MYKEY = 'XXxxxxxxxxx'
 MYSECRET = 'xxxxxx'
@@ -197,7 +190,7 @@ def process_images(paths, logger, session_aws):
 
         # Obtenemos el nombre de fichero de imagen y qr
         nombre_fichero_imagen, nombre_fichero_base64 = obtiene_nombre_fichero(url_imagen, logger)
-        # TODO Se esta procesando o se ha procesado ya?
+        # Se esta procesando o se ha procesado ya?
         procesar = existe(table, nombre_fichero_imagen)
         if procesar is False:
             logger.info(f'URL ya procesada: {nombre_fichero_imagen}')
@@ -226,21 +219,11 @@ def process_images(paths, logger, session_aws):
                 logger.info(f'Tamaño final destino 2: {target_size}')
                 logger.info(f'Color dominante para el tipo {tipo_imagen}: {dominant_color}')
 
-                # TODO Terminar de decidir como va esto... si todo va a ser modelo 5...
-                # Ahora tenemos que elegir el modelos de ampliación a aplicar y su calidad
-                # La estrategia es las imágenes prequeñas 300x600 p. ej multiplar por x4 y más calidad
-                # y reducir o ampliar el ajuste final por CV2 hasta el resultado necesario
-                # El resto multiplicar por x2 y reducir por CV2 hasta tamaño necesario
-                # Elección de modelo de superesolución Para imágenes pequeñas usamos más calidad y x4 (más lento)
-                if dim == (300, 100) or dim == (300, 250):
-                    modelo = 4  # modelo x4 y mejor calidad al ser un formato pequeño de partida
-                else:
-                    modelo = 5  # modelo x2 y reduccion posterior
                 modelo = 5
 
-                # TODO Terminar de definir esta parte, de momento el mismo url_short para todos
+                # TODO Obtener l url API desde ENV
                 # Calculamos y guardamos el valor de la url_corta con la api de nuestro proveedor externo
-                domain = '9h5q.short.gy'
+                domain = 'PARAMETRO-ENV'
                 url_click_short = obtiene_url_short(domain, url_click)
 
                 # Creamos un qr y obtenemos el nombre del fichero donde se ha creado
@@ -342,7 +325,7 @@ def process_images(paths, logger, session_aws):
                     'url_click': url_click,
                     's3_url_imagen': nombre_fichero_imagenes_a_guardar_s3,
                     's3_url_qr': nombre_fichero_qr_a_guardar_s3,
-                    'url_click_short': 'TESTTTT',
+                    'url_click_short': url_click_short,
                 }
 
                 bulk_load_items(item, table)
@@ -488,22 +471,15 @@ def extraer_info_imagen(filenames_list, imagen, logger, tipo_imagen):
     return dim, dominant_color, target_size
 
 
-# TODO ANDRES, revisar las posibilidades de este codigo con cuenta Free...
 def obtiene_url_short(domain, url_click):
-    # TODO Andres: gestion de keys
-    api_key = 'sk_NXkXYJDAKqE5eP88'
-    res = requests.post('https://api.short.io/links', json={
-        'domain': domain,
-        'originalURL': url_click,
-    }, headers={
-        'authorization': api_key,
-        'content-type': 'application/json'
-    }, )
-
+    # TODO Obtener la base URL como parametro
+    url = f'https://g0jzs4d0ci.execute-api.eu-west-1.amazonaws.com/create?long_url={url_click}'
+    # TODO Control de errores
+    res = requests.get(url)
     res.raise_for_status()
     data = res.json()
 
-    return data['shortURL']
+    return data['short_url']
 
 
 # Funcion de subida masiva de ficheros de anunciós captuardos a mano a Dynamo DB en parametros_del_modelo
