@@ -11,6 +11,9 @@ import colorthief
 from colorthief import ColorThief
 import base64
 import itertools
+import shutil
+
+from decimal import Decimal
 
 from botocore.exceptions import ClientError
 
@@ -170,8 +173,8 @@ def crear_tabla_dinamodb(session_aws):
     return table_description
 
 
-def process_images(paths, logger, session_aws):
-    table = dame_tabla_dinamodb(logger, session_aws)
+def process_images(paths, logger, session_aws, borrar_temps):
+    table = dame_tabla_dinamodb(logger, session_aws, TABLE_NAME)
     if table is None:
         logger.error(f'Salimos del proceso, {len(paths)} imagenes no seran procesadas')
         return
@@ -197,18 +200,18 @@ def process_images(paths, logger, session_aws):
             logger.info(f'URL ya procesada: {nombre_fichero_imagen}')
             continue
 
+        # TODO Andres: Para pruebas de imagen voy a guardar de momento en un dir por escalado
+        characters = string.ascii_letters
+        result_str = ''.join(random.choice(characters) for _ in range(5))
+        path_base = '.'
+        temp_folder = os.path.join(path_base, "img", 'imagenes_temp_' + result_str)
+        os.mkdir(temp_folder)
+
         # Descargamos la imagen desde el CDN del anunciante y calculamos algunos datos de ella
         tipo_imagen, imagen, filenames_list, durations_list = load_image_from_url(url_imagen, temp_folder, logger)
 
         if imagen is not None:
             try:
-                # TODO Andres: Para pruebas de imagen voy a guardar de momento en un dir por escalado
-                characters = string.ascii_letters
-                result_str = ''.join(random.choice(characters) for _ in range(5))
-                path_base = '.'
-                temp_folder = os.path.join(path_base, "img", 'imagenes_temp_' + result_str)
-                os.mkdir(temp_folder)
-
                 # Asignacion nombres de archivos.
                 nombre_fichero_imagen_a_guardar = nombre_fichero_base64 + '.' + tipo_imagen
                 nombre_fichero_qr_a_guardar = nombre_fichero_base64 + '.qr'
@@ -229,7 +232,6 @@ def process_images(paths, logger, session_aws):
 
                 # Creamos un qr y obtenemos el nombre del fichero donde se ha creado
                 nombre_fichero_qr_temp = make_qr(temp_folder, url_click_short, dominant_color, light_='white')
-                qr_image = Image_pil.open(nombre_fichero_qr_temp)
 
                 # Ajustamos el QR al tamaño determinado para este tipo
                 if target_size > 300:
@@ -319,6 +321,11 @@ def process_images(paths, logger, session_aws):
                 logger.info(f'Respuesta s3 al guardar qr: {response}')
 
                 # Subo los resultados a Dynamo
+                fecha_creacion = datetime.datetime.utcnow().isoformat()
+                fecha_temp = datetime.datetime.now()
+                # Nos vale en segundos
+                ts_creacion = Decimal(round(fecha_temp.timestamp(), 0))
+
                 item = {
                     'nombre_imagen': str(nombre_fichero_imagen),
                     'SentTimestamp': timestamp_creacion,
@@ -327,28 +334,18 @@ def process_images(paths, logger, session_aws):
                     's3_url_imagen': nombre_fichero_imagenes_a_guardar_s3,
                     's3_url_qr': nombre_fichero_qr_a_guardar_s3,
                     'url_click_short': url_click_short,
+                    'fecha_creacion_utc': fecha_creacion,
+                    'ts_creacion_utc': int(ts_creacion),
+                    'fecha_ultimo_acceso': fecha_creacion,
+                    'ts_ultimo_acceso': int(ts_creacion)
                 }
 
                 bulk_load_items(item, table)
 
-                # TODO Andres de momento no borramos para ver resultados
-                # # Quitamos los fichero empleados.
-                # # Specify the directory path where the files are located
-                # directory_path = '.\\'
-                #
-                # # Specify the string to search for in filenames
-                # search_strings = ['qr_temp', 'png', 'gif_frame', 'imgen_temp']
-                #
-                # # Call the function to remove files containing the specified string in the directory
-                # for string_aux in search_strings:
-                #     remove_files_with_string(directory_path, string_aux)
-                #
-                # os.remove(nombre_fichero_a_guardar)
-                # os.remove(nombre_fichero_qr_a_guardar)
-                # # os.remove(filenames_list)
-                # # os.remove(nombre_fichero_qr_temp)
-                # # os.remove(nombre_fichero_qr_temp_reescalado)
-                # # os.remove('temp_resized_gif.gif')
+                # Quitamos los fichero empleados.
+                if borrar_temps:
+                    shutil.rmtree(temp_folder)
+                    # remove_files_with_string(temp_folder)
 
             except Exception as e:
                 logger.error(f"Exception escalando la imagen con URL: {url_imagen}, mensaje: ", exc_info=True)
@@ -361,7 +358,7 @@ def process_images(paths, logger, session_aws):
     return  # de toda la función de reescalado , generacion de QRs y de subida a almancenamiento S3
 
 
-def dame_tabla_dinamodb(logger, session_aws):
+def dame_tabla_dinamodb(logger, session_aws, table_name):
     # Abrimos session para dinamo y creamos tabla si no existe
     dynamodb = boto3.resource(
         'dynamodb',
@@ -371,14 +368,14 @@ def dame_tabla_dinamodb(logger, session_aws):
     )
     table = None
     try:
-        table = dynamodb.Table(TABLE_NAME)
+        table = dynamodb.Table(table_name)
     except dynamodb.exceptions.ResourceNotFoundException:
         # TODO Probar la creacion de la tabla...
         table_description = crear_tabla_dinamodb(session_aws)
-        table = dynamodb.Table(TABLE_NAME)
-        logger.warning(f'Tabla {TABLE_NAME} no existe y sera creada.', exc_info=True)
+        table = dynamodb.Table(table_name)
+        logger.warning(f'Tabla {table_name} no existe y sera creada.', exc_info=True)
     except Exception as e:
-        logger.error(f"Exception general creando la tabla: {TABLE_NAME}, mensaje: ", exc_info=True)
+        logger.error(f"Exception general creando la tabla: {table_name}, mensaje: ", exc_info=True)
         table = None
     return table
 
@@ -576,19 +573,6 @@ def obtiene_nombre_fichero(url_anuncio, logger):
         nombre_fichero_base64 = ""
 
     return nombre_fichero, nombre_fichero_base64
-
-
-# Elimina ficheros en paralelo
-def remove_files_with_string(directory, string):
-    def remove_file(file_to_remove):
-        file_path = os.path.join(directory, file_to_remove)
-        os.remove(file_path)
-
-    with concurrent.futures.ThreadPoolExecutor() as executor:
-        filenames = os.listdir(directory)
-        for filename in filenames:
-            if string in filename:
-                executor.submit(remove_file, filename)
 
 
 def get_files_on_s3_resource(session_aws, logger):

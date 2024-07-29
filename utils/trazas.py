@@ -7,16 +7,20 @@ def argumentos_validos():
     parser = argparse.ArgumentParser()
 
     parser.add_argument("-ll", "--LogLevel", help="Nivel de log", default="INFO")
-    parser.add_argument("-dl", "--DirLogs", help="Directorio donde se ubicaran los archivos a tratar, deberan ser "
-                                                 "archivos con extension .log", default="./logs/")
-    parser.add_argument("-od", "--OutputDir", help="Directorio donde se ubicaran los resultados y el archivo de trazas",
-                        default="./")
+    parser.add_argument("-dl", "--DirLogs", help="Directorio donde se ubicaran los archivos a tratar, "
+                                                 "deberan ser archivos con extension .log", default="./logs/")
+    parser.add_argument("-od", "--OutputDir", help="Directorio donde se ubicaran los resultados y "
+                                                   "el archivo de trazas", default="./")
     parser.add_argument("--borrar-database", default=False, action="store_true",
                         help="Borrar las entradas en dinamoDB")
     parser.add_argument("--info-database", default=True, action="store_true",
                         help="Informacion sobre tabla en dinamoDB")
     parser.add_argument("--enviar-urls", default=False, action="store_true",
                         help="Enviar Urls a la cola de mensajes para su procesamiento")
+    parser.add_argument("--borrar-temps", default=False, action="store_true",
+                        help="Borra los archivos temporales del procesamiento de cada imagen")
+    parser.add_argument("-dv", "--DiasVidaEntidades", help="Dias que se mantendran las entidades en sus "
+                                                           "almacenamientos", default=30)
 
     return parser
 

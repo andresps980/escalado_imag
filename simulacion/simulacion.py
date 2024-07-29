@@ -1,6 +1,10 @@
+import datetime
+
+from decimal import Decimal
+
 from utils.trazas import configura_logs, argumentos_validos
 from utils.aws_utils import create_session, send_message_sqs, dame_tabla_dinamodb, truncateTable, tabla_info, \
-    get_files_on_s3_resource
+    get_files_on_s3_resource, TABLE_NAME, TABLE_NAME_URL
 
 
 # Obtenemos el total de URLs de anuncios reales captados desde periódicos listado_url_anuncios.txt Este fichero es un
@@ -41,7 +45,9 @@ if __name__ == '__main__':
 
     # Truncado de la tabla dinamoDB usada
     if args.borrar_database:
-        table = dame_tabla_dinamodb(logger, session_aws)
+        table = dame_tabla_dinamodb(logger, session_aws, TABLE_NAME)
+        truncateTable(table)
+        table = dame_tabla_dinamodb(logger, session_aws, TABLE_NAME_URL)
         truncateTable(table)
 
     if args.info_database:
@@ -50,8 +56,8 @@ if __name__ == '__main__':
 
     if args.enviar_urls:
         # lista_url_anuncios = read_text_file('D:\pruebas_repo_mostaza\escalado_imag\data\listado_imagenes_errores.txt')
-        lista_url_anuncios = read_text_file('D:\pruebas_repo_mostaza\escalado_imag\data\listado_url_anuncios.txt')
-        # lista_url_anuncios = read_text_file('D:\pruebas_repo_mostaza\escalado_imag\data\list2.txt')
+        # lista_url_anuncios = read_text_file('D:\pruebas_repo_mostaza\escalado_imag\data\listado_url_anuncios.txt')
+        lista_url_anuncios = read_text_file('D:\pruebas_repo_mostaza\escalado_imag\data\list2.txt')
         # lista_url_anuncios = read_text_file('D:\pruebas_repo_mostaza\escalado_imag\data\list3.txt')
         logger.info(f'Numero de filas leidas. {len(lista_url_anuncios)}')
 
